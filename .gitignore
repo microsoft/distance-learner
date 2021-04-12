@@ -3,5 +3,6 @@ dumps/
 notebooks/.ipynb_checkpoints/*
 __pycache__
 lightning_logs/
+tune_dist_learn_resnet18*
 notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints
