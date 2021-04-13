@@ -249,7 +249,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
 
     
     config = {
-        "lr": tune.grid_search([1e-2, 1e-3]),
+        "lr": tune.grid_search([1e-5, 1e-6]),
         "batch_size": tune.grid_search([128, 256, 512]),
         "optimizer_type": tune.grid_search(["sgd", "adam"]),
         "momentum": tune.grid_search([0.2, 0.5, 0.9]),
@@ -278,7 +278,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
         config=config,
         num_samples=num_samples,
         progress_reporter=reporter,
-        name="tune_dist_learn_resnet18_vm1",
+        name="tune_dist_learn_resnet18_vm3",
         local_dir=save_dir)
 
     print("Best hyperparameters found were: ", analysis.best_config)
@@ -289,7 +289,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
 
 
 NUM_EPOCHS = 200
-DATA_DIR = "/data/adv_geom/datasets/expB/"
+DATA_DIR = "/azuredrive/datasets/expB/"
 SAVE_DIR = "/azuredrive/ray_results/"
 
 # config = {
