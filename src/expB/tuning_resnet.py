@@ -241,7 +241,7 @@ def train_model_tune_checkpoint(config,
 # In[ ]:
 
 
-def tune_model(data_dir, num_samples=1, num_epochs=5, gpus_per_trial=1):
+def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1):
     
     
 #     ResNet18MfldDistRegressor.download_data(data_dir)
@@ -260,7 +260,7 @@ def tune_model(data_dir, num_samples=1, num_epochs=5, gpus_per_trial=1):
 
 
     reporter = CLIReporter(
-        parameter_columns=["lr", "momentum", "batch_size", "optimizer_type"],
+        parameter_columns=["lr", "momentum", "batch_size", "optimizer_type", "num_epochs", "scheduler_params"],
         metric_columns=["val_loss", "training_iteration"])
 
     analysis = tune.run(
@@ -278,7 +278,8 @@ def tune_model(data_dir, num_samples=1, num_epochs=5, gpus_per_trial=1):
         config=config,
         num_samples=num_samples,
         progress_reporter=reporter,
-        name="tune_dist_learn_resnet18")
+        name="tune_dist_learn_resnet18",
+        local_dir=save_dir)
 
     print("Best hyperparameters found were: ", analysis.best_config)
 
@@ -289,6 +290,7 @@ def tune_model(data_dir, num_samples=1, num_epochs=5, gpus_per_trial=1):
 
 NUM_EPOCHS = 200
 DATA_DIR = "/data/adv_geom/datasets/expB/"
+SAVE_DIR = "/azuredrive/ray_results/"
 
 # config = {
     
@@ -306,7 +308,7 @@ DATA_DIR = "/data/adv_geom/datasets/expB/"
 # In[ ]:
 
 
-tune_model(data_dir=DATA_DIR)
+tune_model(data_dir=DATA_DIR, num_epochs=NUM_EPOCHS)
 
 
 # In[ ]:
