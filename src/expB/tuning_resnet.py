@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import copy
+from typing import Dict, List, Optional, Union
 
 import torch
 import pytorch_lightning as pl
@@ -20,13 +21,16 @@ from tqdm import tqdm
 
 import shutil
 import tempfile
+
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.utilities.cloud_io import load as pl_load
+from pytorch_lightning import Callback, Trainer, LightningModule
+
 from ray import tune
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
-from ray.tune.integration.pytorch_lightning import TuneReportCallback,     TuneReportCheckpointCallback
+from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback, TuneCallback
 
 
 
@@ -40,6 +44,41 @@ from myNNs import *
 
 
 # In[ ]:
+
+class _SameFileTuneCheckpointCallback(TuneCallback):
+
+
+    def __init__(self,
+                 filename: str = "checkpoint",
+                 on: Union[str, List[str]] = "validation_end"):
+        super(_SameFileTuneCheckpointCallback, self).__init__(on)
+        self._filename = filename
+
+    def _handle(self, trainer: Trainer, pl_module: LightningModule):
+        if trainer.running_sanity_check:
+            return
+        # step = f"epoch={trainer.current_epoch}-step={trainer.global_step}"
+        step = f"model" # to avoid multiple files
+        with tune.checkpoint_dir(step=step) as checkpoint_dir:
+            trainer.save_checkpoint(
+                os.path.join(checkpoint_dir, self._filename))
+
+
+
+class CustomTuneReportCheckpointCallback(TuneCallback):
+
+
+    def __init__(self,
+                 metrics: Union[None, str, List[str], Dict[str, str]] = None,
+                 filename: str = "checkpoint",
+                 on: Union[str, List[str]] = "validation_end"):
+        super(CustomTuneReportCheckpointCallback, self).__init__(on)
+        self._checkpoint = _SameFileTuneCheckpointCallback(filename, on)
+        self._report = TuneReportCallback(metrics, on)
+
+    def _handle(self, trainer: Trainer, pl_module: LightningModule):
+        self._checkpoint._handle(trainer, pl_module)
+        self._report._handle(trainer, pl_module)
 
 
 
@@ -213,7 +252,7 @@ def train_model_tune_checkpoint(config,
         logger=TensorBoardLogger(
             save_dir=tune.get_trial_dir(), name="", version="."),
         callbacks=[
-            TuneReportCheckpointCallback(
+            CustomTuneReportCheckpointCallback(
                 metrics={
                     "val_loss": "ptl/val_loss"
                 },
@@ -249,7 +288,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
 
     
     config = {
-        "lr": tune.grid_search([1e-5, 1e-6]),
+        "lr": tune.grid_search([1e-2, 1e-3]),
         "batch_size": tune.grid_search([128, 256, 512]),
         "optimizer_type": tune.grid_search(["sgd", "adam"]),
         "momentum": tune.grid_search([0.2, 0.5, 0.9]),
@@ -257,6 +296,17 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
         "num_epochs": num_epochs
 
     }
+
+    # for debugging
+    # config = {
+    #     "lr": tune.grid_search([1e-6]),
+    #     "batch_size": tune.grid_search([128]),
+    #     "optimizer_type": tune.grid_search(["sgd"]),
+    #     "momentum": tune.grid_search([0.9]),
+    #     "scheduler_params": {"warmup": 10, "cooldown": 125},
+    #     "num_epochs": num_epochs
+
+    # }
 
 
     reporter = CLIReporter(
@@ -278,7 +328,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
         config=config,
         num_samples=num_samples,
         progress_reporter=reporter,
-        name="tune_dist_learn_resnet18_vm3",
+        name="tune_dist_learn_resnet18_vm1",
         local_dir=save_dir)
 
     print("Best hyperparameters found were: ", analysis.best_config)
