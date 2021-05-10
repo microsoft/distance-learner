@@ -36,6 +36,8 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
+from ptcifar.models import ResNet18
+
 
 class MLP(nn.Module):
     
@@ -54,7 +56,9 @@ class MLP(nn.Module):
             layers.append(("relu-{n}".format(n=i+1), nn.ReLU()))
                     
         layers.append(("fcn-" + str(len(hidden_sizes)), nn.Linear(hidden_sizes[-1], output_size)))
-        
+        layers.append(("relu-" + str(len(hidden_sizes)), nn.ReLU()))
+
+
         self.layers = nn.Sequential(OrderedDict(layers))
         
     def forward(self, X):
@@ -216,4 +220,44 @@ class ConvNet3(nn.Module):
         
         return logits
 
+class MTLModelForDistanceAndClass(nn.Module):
 
+    
+
+    def __init__(self, input_size, output_size):
+        """
+            :param input_size: dims of input 
+            :type input_size: int
+            :param output_size: number of classes 
+            :type output_size: int
+        """        
+
+
+        super(MTLModelForDistanceAndClass, self).__init__()    
+
+        self.input_size = input_size
+        self.output_size = output_size
+
+        self.shared_resnet = self.ResNet18(num_classes=512)
+        loss_func = nn.MSELoss()
+
+
+        self.distance_branch = nn.Sequential(OrderedDict([
+            ("dist-linear-00", nn.Linear(512, 256)),
+            ("dist-linear-01", nn.Linear(256, 128)),
+            ("dist-linear-01", nn.Linear(128, self.output_size)), 
+        ]))
+
+        self.class_branch = nn.Sequential(OrderedDict([
+            ("class-linear-00", nn.Linear(512, 256)),
+            ("class-linear-01", nn.Linear(256, 128)),
+            ("class-linear-01", nn.Linear(128, self.output_size)), 
+        ]))
+
+    def forward(self, X):
+
+        shared_logits = self.shared_resnet(X)
+        distance_logits = self.distance_branch(shared_logits)
+        class_logits = self.class_branch(shared_logits)
+
+        return distance_logits, class_logits
