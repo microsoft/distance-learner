@@ -261,9 +261,9 @@ class MLPDistRegressor(pl.LightningModule):
             test_set = RandomSphere(**test_config)
         
         if generate:
-            torch.save(train_set, os.path.join(data_dir, "train_set_(N={a},num_neg={b}).pt".format(a=train_set.N, b=train_set.num_neg)))
-            torch.save(val_set, os.path.join(data_dir, "val_set_(N={a},num_neg={b}).pt".format(a=val_set.N, b=val_set.num_neg)))
-            torch.save(test_set, os.path.join(data_dir, "test_set_(N={a},num_neg={b}).pt".format(a=test_set.N, b=test_set.num_neg)))
+            torch.save(train_set, os.path.join(data_dir, "train_set.pt"))
+            torch.save(val_set, os.path.join(data_dir, "val_set.pt"))
+            torch.save(test_set, os.path.join(data_dir, "test_set.pt"))
         else:
             train_set = torch.load(os.path.join(data_dir, "train_set.pt"))
             val_set = torch.load(os.path.join(data_dir, "val_set.pt"))
@@ -294,7 +294,7 @@ class MLPDistRegressor(pl.LightningModule):
         return train_set, val_set
 
     def prepare_data(self):
-        self.train_set, self.val_set = self.download_data(self.data_dir, generate=False)
+        self.train_set, self.val_set = self.download_data(self.data_dir, generate=True)
 
         self.logger.experiment.add_histogram("distances/train",self.train_set.distances)
         self.logger.experiment.add_histogram("distances/val",self.val_set.distances)
@@ -575,16 +575,24 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
     
 #     ResNet18MfldDistRegressor.download_data(data_dir)
 
-
-    
     config = {
-        "lr": tune.grid_search([0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000, 5000, 10000]),
-        "batch_size": tune.grid_search([128]),
-        "optimizer_type": tune.grid_search(["adam"]),
+        "lr": tune.grid_search([1e-6, 5e-6, 1e-5, 5e-5, 1e-4, 5e-4, 1e-3, 5e-3, 1e-2]),
+        "batch_size": tune.grid_search([512, 128]),
+        "optimizer_type": tune.grid_search(["sgd", "adam"]),
         "momentum": tune.grid_search([0.9]),
         "scheduler_params": {"warmup": 10, "cooldown": 150},
         "num_epochs": num_epochs
     }
+
+    
+    # config = {
+    #     "lr": tune.grid_search([0.05, 0.1, 0.5, 1, 5, 10, 50, 100, 500, 1000, 5000, 10000]),
+    #     "batch_size": tune.grid_search([128]),
+    #     "optimizer_type": tune.grid_search(["adam"]),
+    #     "momentum": tune.grid_search([0.9]),
+    #     "scheduler_params": {"warmup": 10, "cooldown": 150},
+    #     "num_epochs": num_epochs
+    # }
 
     # for debugging
     # config = {
@@ -599,7 +607,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
 
 
     reporter = CLIReporter(
-        parameter_columns=["lr", "momentum", "batch_size", "optimizer_type", "num_epochs", "scheduler_params", "data_params"],
+        parameter_columns=["lr", "momentum", "batch_size", "optimizer_type", "num_epochs", "scheduler_params"],
         metric_columns=["val_loss", "training_iteration"])
 
     analysis = tune.run(
@@ -617,7 +625,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
         config=config,
         num_samples=num_samples,
         progress_reporter=reporter,
-        name="tune_dist_learn_mlp_tune_{max_norm=2,D=1,n=2,N=50000,num_neg=25000}_lr_sweep",
+        name="tune_dist_learn_mlp_tune_{max_norm=2,D=1,n=2,N=50000,num_neg=25000}",
         local_dir=save_dir)
 
     print("Best hyperparameters found were: ", analysis.best_config)
@@ -628,7 +636,7 @@ def tune_model(data_dir, save_dir, num_samples=1, num_epochs=5, gpus_per_trial=1
 
 
 NUM_EPOCHS = 250
-DATA_DIR = "/azuredrive/datasets/expB/one_sphere/max_norm=2,D=1,n=2/tuning/N=50000,num_neg=25000/"
+DATA_DIR = "/azuredrive/datasets/expB/one_sphere/max_norm=2,D=1,n=2/tuning/hparams_wo_neg_size/"
 SAVE_DIR = "/azuredrive/ray_results/"
 
 # config = {
