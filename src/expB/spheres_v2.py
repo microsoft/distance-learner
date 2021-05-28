@@ -52,7 +52,8 @@ class RandomSphere(Dataset):
     
     def __init__(self, N=1000, num_neg=None, n=100, k=3, r=10.0,\
                  D=50.0, max_norm=2.0, mu=10, sigma=5, seed=42,\
-                 x_ck=None, rotation=None, translation=None):
+                 x_ck=None, rotation=None, translation=None, normalize=True,\
+                 norm_factor=None, gamma=0.5):
         
         """
         :param N: total number of samples
@@ -65,7 +66,6 @@ class RandomSphere(Dataset):
         :type r: float
         :param D: clamping limit for negative examples
         :type D: float
-        :return: points
         :param max_norm: maximum possible distance of point from manifold can be `r / max_norm`
         :type max_norm: float
         :param mu: mean of normal distribution from which we sample
@@ -74,6 +74,18 @@ class RandomSphere(Dataset):
         :type: float
         :param seed: random seed (default is the answer to the ultimate question!)
         :type: int
+        :param x_ck: center of lower dimensional manifold
+        :type numpy.array:
+        :param normalize: whether to normalize the dataset or not
+        :type: bool
+        :param rotation: rotation matrix to be used
+        :type numpy.ndarray:
+        :param translation: translation vector to be used
+        :type numpy.array:
+        :param norm_factor: factor by which to normalise the coordinates
+        :type float:
+        :param gamma: conservative scale used in normalisation, only used if `norm_factor` is not provided
+        :type float:
         """
         
         self.N = N
@@ -146,11 +158,30 @@ class RandomSphere(Dataset):
         else:
             self.rotation = rotation
         
+        self.pre_images_k = None
+        """k-dimensional on-manifold pre-images of the off-manifold points"""
+
+        self.normed_points_n = self.points_n
+        """points normalized so that they lie in a unit cube"""
+        self.normed_x_cn = self.x_cn
+        """center normalized to lie in a unit cube"""
+        self.normed_distances = self.distances
+        """normalised distances"""
+        self.normed_actual_distances = self.actual_distances
+        """actual normalised distances"""
+        self.norm_factor = norm_factor
+        """factor by which to normalise (use for inverting)"""
+        self.gamma = gamma 
+        """conservative factor used in normalisation"""
+        self.fix_center = self.x_cn
+        """center after re-positioning normalised dataset"""
         
         self.gen_center()
         print("center generated")
         self.gen_points()
         print("points generated")
+        self.gen_pre_images()
+        print("pre-images generated")
         self.embed_in_n()
         print("embedding done")
 #         self.compute_distances()
@@ -159,14 +190,30 @@ class RandomSphere(Dataset):
         self.points_k = torch.from_numpy(self.points_k).float()
         self.distances = torch.from_numpy(self.distances).float()
         self.actual_distances = torch.from_numpy(self.actual_distances).float()
+
+        self.normalize = normalize
+
+        if self.normalize:
+            self.normalization()
+            print("normalization complete")
+
+        
         
     def __len__(self):
         return self.points_n.shape[0]
     
     def __getitem__(self, idx):
-        return self.points_n[idx], self.distances[idx]
+        # return self.points_n[idx], self.distances[idx]
+        return {
+            "points_n": self.points_n[idx],
+            "distances": self.distances[idx],
+            "actual_distances": self.actual_distances[idx],
+            "normed_points_n": self.normed_points_n[idx],
+            "normed_distances": self.normed_distances[idx],
+            "normed_actual_distances": self.normed_actual_distances[idx]
+        }
         
-        
+
     def gen_center(self):
         """generate a center in lower dimension"""
         if self.x_ck is not None:
@@ -174,9 +221,14 @@ class RandomSphere(Dataset):
         self.x_ck = np.random.normal(self.mu, self.sigma, self.k)
         
     def gen_points(self):
-        """generating points in k-dim and embedding in n-dim"""
-        points_k = np.random.normal(self.mu, self.sigma, (self.N, self.k))
-        points_k = points_k - self.x_ck
+        """
+        
+            generating points in k-dim and embedding in n-dim
+
+            reference: https://en.wikipedia.org/wiki/N-sphere#Uniformly_at_random_on_the_(n_%E2%88%92_1)-sphere
+            
+        """
+        points_k = np.random.normal(size=(self.N - self.num_neg, self.k))
         
         norms = np.linalg.norm(points_k, axis=1, ord=2).reshape(-1, 1)
         points_k = (points_k / norms)
@@ -195,6 +247,30 @@ class RandomSphere(Dataset):
         points_k = points_k + self.x_ck
         
         self.points_k = points_k
+
+    def gen_pre_images(self):
+        """generating on-manifold k-dimensional projections of off-maniofld samples"""
+
+        points_k = np.random.normal(size=(self.num_neg, self.k))
+        
+        
+        norms = np.linalg.norm(points_k, axis=1, ord=2).reshape(-1, 1)
+        points_k = (points_k / norms)
+        
+#         print(np.round(np.linalg.norm(points_k, axis=1, ord=2))[np.ceil(np.linalg.norm(points_k, axis=1, ord=2)) > 1])
+        
+        assert (np.round(np.linalg.norm(points_k, axis=1, ord=2)) == 1).all()
+        
+        points_k = self.r * points_k
+        
+#         neg_norms = np.random.uniform(low=1 + np.finfo(np.float).eps,\
+#                                       high=self.max_norm, size=np.floor(self.N / 2).astype(np.int64))
+        
+#         points_k[:np.floor(self.N / 2).astype(np.int64)] = (neg_norms.reshape(-1, 1) / self.r) * points_k[:np.floor(self.N / 2).astype(np.int64)]
+        
+        points_k = points_k + self.x_ck
+        
+        self.pre_images_k = points_k
         
     def make_neg_examples(self):
         """generating negative examples, i.e., points not on the manifold"""
@@ -205,7 +281,8 @@ class RandomSphere(Dataset):
         #
         # Also note that these negative examples are being generated using first
         # half of self.points_k
-        normal_vectors_to_mfld_at_p = self.points_k[:self.num_neg] - self.x_ck
+        
+        normal_vectors_to_mfld_at_p = self.pre_images_k - self.x_ck
         embedded_normal_vectors_to_mfld_at_p = np.zeros((self.num_neg, self.n))
         embedded_normal_vectors_to_mfld_at_p[:, :self.k] = normal_vectors_to_mfld_at_p
         
@@ -263,7 +340,8 @@ class RandomSphere(Dataset):
         neg_examples = (neg_norms.reshape(-1, 1) / np.linalg.norm(neg_examples, axis=1, ord=2).reshape(-1, 1)) * neg_examples
 
         # add position vector of $p$ to get origin centered coordinates
-        neg_examples[:, :self.k] = neg_examples[:, :self.k] + self.points_k[:self.num_neg]
+        # neg_examples[:, :self.k] = neg_examples[:, :self.k] + self.points_k[self.off_mfld_idx]
+        neg_examples[:, :self.k] = neg_examples[:, :self.k] + self.pre_images_k
 
         # distances from the manifold will be the norms the samples were rescaled by
         neg_distances = neg_norms
@@ -290,7 +368,7 @@ class RandomSphere(Dataset):
         self.points_n_trivial_ = np.zeros((self.N, self.n))
         self.points_n_trivial_[:self.num_neg] = neg_examples
         
-        self.points_n_trivial_[self.num_neg:, :self.k] = self.points_k[self.num_neg:]
+        self.points_n_trivial_[self.num_neg:, :self.k] = self.points_k
         self.points_n_tr_ = self.points_n_trivial_ + self.translation
         
         self.points_n_rot_ = np.dot(self.rotation, self.points_n_tr_.T).T
@@ -304,9 +382,34 @@ class RandomSphere(Dataset):
         
         # checking that the on-manifold points are still self.r away from center
         print(np.round(np.linalg.norm(self.points_n[self.num_neg:] - self.x_cn, axis=1, ord=2)))
-        assert (np.round(np.linalg.norm(self.points_n[self.num_neg:] - self.x_cn, axis=1, ord=2)) == self.r).all()
+        # assert (np.round(np.linalg.norm(self.points_n[self.on_mfld_idx] - self.x_cn, axis=1, ord=2)) == self.r).all()
     
-    
+    def invert_distances(self, normed_distances):
+        """invert normalised distances to unnormalised values"""
+        return normed_distances * self.norm_factor
+
+    def invert_points(self, normed_points):
+        """invert normalised points to unnormalised values"""
+        normed_points = normed_points - self.fix_center + self.normed_x_cn
+        return normed_points * self.norm_factor
+
+    def normalization(self):
+        """normalise points and distances so that the whole setup lies in a unit sphere"""
+        if self.norm_factor is None:
+            self.norm_factor = self.gamma * np.max(np.linalg.norm(self.points_n - self.x_cn, ord=2, axis=1))
+        self.normed_points_n = self.points_n / self.norm_factor
+        self.normed_x_cn = self.x_cn / self.norm_factor
+        self.normed_distances = self.distances / self.norm_factor
+        self.normed_actual_distances = self.actual_distances / self.norm_factor
+
+        # change centre to bring it closer to origin (smaller numbers are easier to learn)
+        tmp = self.gamma if self.gamma is not None else 1
+        self.fix_center = tmp * np.ones(self.n)
+        self.normed_points_n = self.normed_points_n - self.normed_x_cn + self.fix_center
+        
+        
+
+
     def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):
         """
             generate plots that act as visual sanity checks
@@ -337,8 +440,8 @@ class RandomSphere(Dataset):
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n_trivial_[self.num_neg:, dimX],\
-                      self.points_n_trivial_[self.num_neg:, dimY], self.points_n_trivial_[self.num_neg:, dimZ])
+        ax1.scatter3D(self.points_n_trivial_[self.on_mfld_idx, dimX],\
+                      self.points_n_trivial_[self.on_mfld_idx, dimY], self.points_n_trivial_[self.on_mfld_idx, dimZ])
         
         plt.title("on-manifold samples (trivial embedding)")
         plt.show()
@@ -347,8 +450,8 @@ class RandomSphere(Dataset):
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n_tr_[self.num_neg:, dimX],\
-                      self.points_n_tr_[self.num_neg:, dimY], self.points_n_tr_[self.num_neg:, dimZ])
+        ax1.scatter3D(self.points_n_tr_[self.on_mfld_idx, dimX],\
+                      self.points_n_tr_[self.on_mfld_idx, dimY], self.points_n_tr_[self.on_mfld_idx, dimZ])
         
         plt.title("on-manifold samples (after translation)")
         plt.show()
@@ -357,8 +460,8 @@ class RandomSphere(Dataset):
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n[self.num_neg:, dimX],\
-                      self.points_n[self.num_neg:, dimY], self.points_n[self.num_neg:, dimZ])
+        ax1.scatter3D(self.points_n[self.on_mfld_idx, dimX],\
+                      self.points_n[self.on_mfld_idx, dimY], self.points_n[self.on_mfld_idx, dimZ])
         
         plt.title("on-manifold samples (after rotation)")
         plt.show()
@@ -371,16 +474,16 @@ class RandomSphere(Dataset):
         
         # trivial pre_image
         
-        neg_pre_img = self.points_k[:self.num_neg]
+        neg_pre_img = self.points_k[self.off_mfld_idx]
         neg_pre_img_trivial_ = np.zeros((self.num_neg, self.n))
         neg_pre_img_trivial_[:, :self.k] = neg_pre_img
         
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n_trivial_[self.num_neg:, dimX],\
-              self.points_n_trivial_[self.num_neg:, dimY],\
-              self.points_n_trivial_[self.num_neg:, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        ax1.scatter3D(self.points_n_trivial_[self.on_mfld_idx, dimX],\
+              self.points_n_trivial_[self.on_mfld_idx, dimY],\
+              self.points_n_trivial_[self.on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
         
         
         
@@ -390,20 +493,20 @@ class RandomSphere(Dataset):
         
         
         
-        ax1.scatter3D(self.points_n_trivial_[:self.num_neg, dimX][idx],\
-                      self.points_n_trivial_[:self.num_neg, dimY][idx],\
-                      self.points_n_trivial_[:self.num_neg, dimZ][idx], color="red", label="off-manifold")
+        ax1.scatter3D(self.points_n_trivial_[self.off_mfld_idx, dimX][idx],\
+                      self.points_n_trivial_[self.off_mfld_idx, dimY][idx],\
+                      self.points_n_trivial_[self.off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
         
         actual_distances_trivial_ = np.linalg.norm(neg_pre_img_trivial_\
-                               - self.points_n_trivial_[:self.num_neg], ord=2, axis=1)
+                               - self.points_n_trivial_[self.off_mfld_idx], ord=2, axis=1)
         
         for i in idx:
-            ax1.plot([neg_pre_img_trivial_[:, dimX][i], self.points_n_trivial_[:self.num_neg, dimX][i]],\
-                    [neg_pre_img_trivial_[:, dimY][i], self.points_n_trivial_[:self.num_neg, dimY][i]],\
-                    [neg_pre_img_trivial_[:, dimZ][i], self.points_n_trivial_[:self.num_neg, dimZ][i]], color="black")
-            ax1.text(np.mean([neg_pre_img_trivial_[:, dimX][i], self.points_n_trivial_[:self.num_neg, dimX][i]]),\
-                    np.mean([neg_pre_img_trivial_[:, dimY][i], self.points_n_trivial_[:self.num_neg, dimY][i]]),\
-                    np.mean([neg_pre_img_trivial_[:, dimZ][i], self.points_n_trivial_[:self.num_neg, dimZ][i]]),\
+            ax1.plot([neg_pre_img_trivial_[:, dimX][i], self.points_n_trivial_[self.off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_trivial_[:, dimY][i], self.points_n_trivial_[self.off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_trivial_[:, dimZ][i], self.points_n_trivial_[self.off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_trivial_[:, dimX][i], self.points_n_trivial_[self.off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_trivial_[:, dimY][i], self.points_n_trivial_[self.off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_trivial_[:, dimZ][i], self.points_n_trivial_[self.off_mfld_idx, dimZ][i]]),\
                     "{:.2f}".format(actual_distances_trivial_[i].item()))
         
         
@@ -412,7 +515,7 @@ class RandomSphere(Dataset):
         plt.show()
         
         plt.hist(np.linalg.norm(neg_pre_img_trivial_\
-                               - self.points_n_trivial_[:self.num_neg], ord=2, axis=1) - self.actual_distances[:self.num_neg].numpy().reshape(-1))
+                               - self.points_n_trivial_[self.off_mfld_idx], ord=2, axis=1) - self.actual_distances[self.off_mfld_idx].numpy().reshape(-1))
         plt.ylabel("freq")
         plt.xlabel("error value")
         plt.title("error distribution for distance value from manifold (trivial)")
@@ -427,9 +530,9 @@ class RandomSphere(Dataset):
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n_tr_[self.num_neg:, dimX],\
-              self.points_n_tr_[self.num_neg:, dimY],\
-              self.points_n_tr_[self.num_neg:, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        ax1.scatter3D(self.points_n_tr_[self.on_mfld_idx, dimX],\
+              self.points_n_tr_[self.on_mfld_idx, dimY],\
+              self.points_n_tr_[self.on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
         
         
         ax1.scatter3D(neg_pre_img_tr_[:, dimX][idx],\
@@ -438,17 +541,17 @@ class RandomSphere(Dataset):
         
         
         
-        ax1.scatter3D(self.points_n_tr_[:self.num_neg, dimX][idx],\
-                      self.points_n_tr_[:self.num_neg, dimY][idx],\
-                      self.points_n_tr_[:self.num_neg, dimZ][idx], color="red", label="off-manifold")
+        ax1.scatter3D(self.points_n_tr_[self.off_mfld_idx, dimX][idx],\
+                      self.points_n_tr_[self.off_mfld_idx, dimY][idx],\
+                      self.points_n_tr_[self.off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
         
         for i in idx:
-            ax1.plot([neg_pre_img_tr_[:, dimX][i], self.points_n_tr_[:self.num_neg, dimX][i]],\
-                    [neg_pre_img_tr_[:, dimY][i], self.points_n_tr_[:self.num_neg, dimY][i]],\
-                    [neg_pre_img_tr_[:, dimZ][i], self.points_n_tr_[:self.num_neg, dimZ][i]], color="black")
-            ax1.text(np.mean([neg_pre_img_tr_[:, dimX][i], self.points_n_tr_[:self.num_neg, dimX][i]]),\
-                    np.mean([neg_pre_img_tr_[:, dimY][i], self.points_n_tr_[:self.num_neg, dimY][i]]),\
-                    np.mean([neg_pre_img_tr_[:, dimZ][i], self.points_n_tr_[:self.num_neg, dimZ][i]]),\
+            ax1.plot([neg_pre_img_tr_[:, dimX][i], self.points_n_tr_[self.off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_tr_[:, dimY][i], self.points_n_tr_[self.off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_tr_[:, dimZ][i], self.points_n_tr_[self.off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_tr_[:, dimX][i], self.points_n_tr_[self.off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_tr_[:, dimY][i], self.points_n_tr_[self.off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_tr_[:, dimZ][i], self.points_n_tr_[self.off_mfld_idx, dimZ][i]]),\
                     "{:.2f}".format(self.actual_distances[i].item()))
         
         
@@ -457,7 +560,7 @@ class RandomSphere(Dataset):
         plt.show()
         
         plt.hist(np.linalg.norm(neg_pre_img_tr_\
-                               - self.points_n_tr_[:self.num_neg], ord=2, axis=1) - self.actual_distances[:self.num_neg].numpy().reshape(-1))
+                               - self.points_n_tr_[self.off_mfld_idx], ord=2, axis=1) - self.actual_distances[self.off_mfld_idx].numpy().reshape(-1))
         plt.ylabel("freq")
         plt.xlabel("error value")
         plt.title("error distribution for distance value from manifold (tanslated)")
@@ -472,9 +575,9 @@ class RandomSphere(Dataset):
         fig = plt.figure(figsize = (10, 7))
         ax1 = plt.axes(projection ="3d")
         
-        ax1.scatter3D(self.points_n_rot_[self.num_neg:, dimX],\
-              self.points_n_rot_[self.num_neg:, dimY],\
-              self.points_n_rot_[self.num_neg:, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        ax1.scatter3D(self.points_n_rot_[self.on_mfld_idx, dimX],\
+              self.points_n_rot_[self.on_mfld_idx, dimY],\
+              self.points_n_rot_[self.on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
         
         
         ax1.scatter3D(neg_pre_img_rot_[:, dimX][idx],\
@@ -483,17 +586,17 @@ class RandomSphere(Dataset):
         
         
         
-        ax1.scatter3D(self.points_n_rot_[:self.num_neg, dimX][idx],\
-                      self.points_n_rot_[:self.num_neg, dimY][idx],\
-                      self.points_n_rot_[:self.num_neg, dimZ][idx], color="red", label="off-manifold")
+        ax1.scatter3D(self.points_n_rot_[self.off_mfld_idx, dimX][idx],\
+                      self.points_n_rot_[self.off_mfld_idx, dimY][idx],\
+                      self.points_n_rot_[self.off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
         
         for i in idx:
-            ax1.plot([neg_pre_img_rot_[:, dimX][i], self.points_n_rot_[:self.num_neg, dimX][i]],\
-                    [neg_pre_img_rot_[:, dimY][i], self.points_n_rot_[:self.num_neg, dimY][i]],\
-                    [neg_pre_img_rot_[:, dimZ][i], self.points_n_rot_[:self.num_neg, dimZ][i]], color="black")
-            ax1.text(np.mean([neg_pre_img_rot_[:, dimX][i], self.points_n_rot_[:self.num_neg, dimX][i]]),\
-                    np.mean([neg_pre_img_rot_[:, dimY][i], self.points_n_rot_[:self.num_neg, dimY][i]]),\
-                    np.mean([neg_pre_img_rot_[:, dimZ][i], self.points_n_rot_[:self.num_neg, dimZ][i]]),\
+            ax1.plot([neg_pre_img_rot_[:, dimX][i], self.points_n_rot_[self.off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_rot_[:, dimY][i], self.points_n_rot_[self.off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_rot_[:, dimZ][i], self.points_n_rot_[self.off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_rot_[:, dimX][i], self.points_n_rot_[self.off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_rot_[:, dimY][i], self.points_n_rot_[self.off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_rot_[:, dimZ][i], self.points_n_rot_[self.off_mfld_idx, dimZ][i]]),\
                     "{:.2f}".format(self.actual_distances[i].item()))
         
         
@@ -502,7 +605,7 @@ class RandomSphere(Dataset):
         plt.show()
         
         plt.hist(np.linalg.norm(neg_pre_img_rot_\
-                               - self.points_n_rot_[:self.num_neg], ord=2, axis=1) - self.actual_distances[:self.num_neg].numpy().reshape(-1))
+                               - self.points_n_rot_[self.off_mfld_idx], ord=2, axis=1) - self.actual_distances[self.off_mfld_idx].numpy().reshape(-1))
         plt.ylabel("freq")
         plt.xlabel("error value")
         plt.title("error distribution for distance value from manifold (rotated)")
@@ -531,38 +634,55 @@ class RandomSphere(Dataset):
         print("relative errors:", rel_errors)
         
 
+
+
+
 class TwoRandomSpheres(Dataset):
     """
         Class containing dataset of two spheres
     """
-    def __init__(self, S1_config, S2_config, seed=42, new_translation_for_S2=None):
+    def __init__(self, S1_config, S2_config, seed=42, new_translation_for_S2=None,\
+                 normalize=True, norm_factor=None, gamma=1.1):
         
         """
         :param S1_config: config for the first sphere
-        :type S1_config: dict
+        :type dict: 
         :param S2_config: config for the second sphere
-        :type S2_config: dict
+        :type dict: 
         :param seed: random seed for any random operations within TwoRandomSpheres
-        :type seed: int
+        :type int: 
+        :param new_translation_for_S2: if user wants to define a fixed translation for S2
+        :type int:
+        :param normalize: flag for normalizing the dataset
+        :type bool:
+        :param norm_factor: factor by which to normalise the points
+        :type float:
+        :param gamma: conservative scale used in normalisation, only used if `norm_factor` is not provided
+        :type float:
         """
         
         self.S1_config = S1_config
         self.S2_config = S2_config
         self.seed = seed
 
-        self.S1 = RandomSphere(**S1_config)
-        self.S2 = RandomSphere(**S2_config)
+        if self.S1_config["n"] != self.S2_config["n"]:
+            raise RuntimeError("higher dimension size `n` should match for both spheres")
+        self.n = self.S1_config["n"]
+
+        # we do not normalize now, since all this will be eventually normalized as a complete dataset
+        self.S1 = RandomSphere(**S1_config, normalize=False, gamma=None, norm_factor=None)
+        self.S2 = RandomSphere(**S2_config, normalize=False, gamma=None, norm_factor=None)
 
         # distance between centres for no overlap
-        self.c_dist = self.S1.r + self.S2.r + (self.S1.r / self.S1.max_norm) + (self.S2.r / self.S2.max_norm) + 1
-
-        # shift centre of S2 to origin
-        S2_points_n_tmp = self.S2.points_n - self.S2.x_cn
-        S2_x_cn_tmp = self.S2.x_cn - self.S2.x_cn
+        self.c_dist = (self.S1.r + self.S2.r + (self.S1.r / self.S1.max_norm) + (self.S2.r / self.S2.max_norm)) * 1.1
 
         ## setting seed
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
+
+        # shift centre of S2 to origin
+        S2_points_n_tmp = self.S2.points_n - self.S2.x_cn
+        S2_x_cn_tmp = self.S2.x_cn - self.S2.x_cn
 
         # sample a new center that is `self.c_dist` from `self.S1.x_cn`
         self.new_translation_for_S2 = new_translation_for_S2
@@ -572,16 +692,14 @@ class TwoRandomSpheres(Dataset):
             new_translation = (new_translation / np.linalg.norm(new_translation, ord=2)) * self.c_dist
             self.new_translation_for_S2 = new_translation + self.S1.x_cn
 
-
         # shift center and points of S2 by `self.new_translation_for_S2`
         self.shifted_S2 = copy.deepcopy(self.S2)
         self.shifted_S2.points_n = S2_points_n_tmp + self.new_translation_for_S2
         self.shifted_S2.x_cn = S2_x_cn_tmp + self.new_translation_for_S2
         self.shifted_S2.translation = self.new_translation_for_S2
 
-        assert (np.linalg.norm(self.shifted_S2.points_n - self.S1.x_cn, ord=2, axis=1) > self.S1.r + self.S1.D).all()
-        assert (np.linalg.norm(self.S1.points_n - self.shifted_S2.x_cn, ord=2, axis=1) > self.S2.r + self.S2.D).all()
-
+        # assert (np.linalg.norm(self.shifted_S2.points_n - self.S1.x_cn, ord=2, axis=1) > self.S1.r + self.S1.D).all()
+        # assert (np.linalg.norm(self.S1.points_n - self.shifted_S2.x_cn, ord=2, axis=1) > self.S2.r + self.S2.D).all()
 
         self.all_points = np.vstack((self.S1.points_n.numpy(), self.shifted_S2.points_n.numpy()))
         
@@ -609,19 +727,92 @@ class TwoRandomSpheres(Dataset):
         self.class_labels[self.S1.N + self.S2.num_neg:] = 2
 
         # shuffling the inputs and targets
-        self.perm = np.random.permutation(self.all_points.shape[0])
+        # self.perm = np.random.permutation(self.all_points.shape[0])
 
-        self.all_points = torch.from_numpy(self.all_points[self.perm]).float()
-        self.all_distances = torch.from_numpy(self.all_distances[self.perm]).float()
-        self.all_actual_distances = torch.from_numpy(self.all_actual_distances[self.perm]).float()
-        self.class_labels = torch.from_numpy(self.class_labels[self.perm]).long()
+        # self.all_points = torch.from_numpy(self.all_points[self.perm]).float()
+        # self.all_distances = torch.from_numpy(self.all_distances[self.perm]).float()
+        # self.all_actual_distances = torch.from_numpy(self.all_actual_distances[self.perm]).float()
+        # self.class_labels = torch.from_numpy(self.class_labels[self.perm]).long()
+
+        self.all_points = torch.from_numpy(self.all_points).float()
+        self.all_distances = torch.from_numpy(self.all_distances).float()
+        self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
+        self.class_labels = torch.from_numpy(self.class_labels).long()
+
+        self.normalize = normalize
+        self.normed_all_points = self.all_points
+        self.normed_all_distances = self.all_distances
+        self.normed_all_actual_distances = self.all_actual_distances
+        self.norm_factor = norm_factor
+        self.gamma = gamma
+        self.fix_center = None
+
+        if self.normalize:
+            self.normalization()
 
 
     def __len__(self):
         return self.all_points.shape[0]
     
     def __getitem__(self, idx):
-        return self.all_points[idx], self.all_distances[idx], self.class_labels[idx]
+        return {
+            "points": self.all_points[idx],
+            "distances": self.all_distances[idx],
+            "normed_points": self.normed_all_points[idx],
+            "normed_distances": self.normed_all_distances[idx],
+            "classes": self.class_labels[idx]
+        }
+
+        # return self.all_points[idx], self.all_distances[idx], self.class_labels[idx]
+
+    def normalization(self):
+        """
+            scales down the points to fit in a unit sphere and moves them closer to origin
+        """
+
+        if self.norm_factor is None:
+            self.norm_factor = self.gamma * (self.c_dist + self.S1.r + self.S2.r + self.S1.max_norm + self.S2.max_norm)
+        self.normed_all_points = self.all_points / self.norm_factor
+        self.normed_all_distances = self.all_distances / self.norm_factor
+        self.normed_all_actual_distances = self.all_distances / self.norm_factor
+    
+        # change the coordinates of the central point
+        self.S1.normed_x_cn = self.S1.x_cn / self.norm_factor
+        self.shifted_S2.normed_x_cn = self.shifted_S2.x_cn / self.norm_factor
+        
+        # pick a central point for the whole dataset
+        self.central_pt = 0.5 * (self.S1.normed_x_cn + self.shifted_S2.normed_x_cn) 
+        # self.central_pt = torch.mean(self.normed_all_points, axis=1)
+        
+        # tmp = 1
+        self.fix_center = 0.5 * np.ones(self.S1.n)
+        self.normed_all_points = self.normed_all_points - self.central_pt + self.fix_center # shift data so that new `central_pt` lies at `self.fix_center`
+        
+        # normalize the individual spheres
+        self.S1.norm_factor = self.norm_factor
+        self.S1.normed_points_n = self.normed_all_points[:self.S1.N, :]
+        self.S1.normed_distances = self.normed_all_distances[:self.S1.N]
+        self.S1.normed_actual_distances = self.normed_all_actual_distances[:self.S1.N]
+        self.S1.normed_x_cn = self.S1.normed_x_cn - self.central_pt + self.fix_center
+
+        self.shifted_S2.norm_factor = self.norm_factor
+        self.shifted_S2.normed_points_n = self.normed_all_points[self.S1.N:, :]
+        self.shifted_S2.normed_distances = self.normed_all_distances[self.S1.N:]
+        self.shifted_S2.normed_actual_distances = self.normed_all_actual_distances[self.S1.N:]
+        self.shifted_S2.normed_x_cn = self.shifted_S2.normed_x_cn - self.central_pt + self.fix_center
+
+        self.normed_all_points = self.normed_all_points.float()
+        self.normed_all_distances = self.normed_all_distances.float()
+
+    def invert_points(self, unnormed_points):
+        unnormed_points = unnormed_points - self.fix_center + self.central_pt
+        return self.norm_factor * unnormed_points
+
+    def invert_distances(self, unnormed_distances):
+        return self.norm_factor * unnormed_distances
+        
+
+
 
 
 if __name__ == '__main__':
@@ -637,8 +828,9 @@ if __name__ == '__main__':
     parser.add_argument("--max_norm", type=float, help="off-manifold samples are upto a distance of `r / max_norm`")
     parser.add_argument("--mu", type=float, help="mean of the normal distribution from which the points are sampled", default=1000)
     parser.add_argument("--sigma", type=float, help="std. deviation of the normal distribution from which points are sampled", default=5000)
+    parser.add_argument("--gamma", type=float, help="scaling factor to use in normalisation", default=0.5)
     
-    parser.add_argument("--seed", type=int, help="random seed for generating the dataset")
+    parser.add_argument("--seed", type=int, help="random seed for generating the dataset", default=42)
     parser.add_argument("--val_seed", type=int, help="different seed for validation set if needed", default=None)
     parser.add_argument("--test_seed", type=int, help="different seed for test set if needed", default=None)
 
@@ -714,7 +906,8 @@ if __name__ == '__main__':
                 "max_norm": args.max_norm,
                 "mu": args.mu,
                 "sigma": args.sigma,
-                "seed": args.seed
+                "seed": args.seed,
+                "gamma": args.gamma
 
             }
 
@@ -739,7 +932,9 @@ if __name__ == '__main__':
                 "x_ck": train_set.x_ck,
                 "translation": train_set.translation,
                 "rotation": train_set.rotation,
-                "seed": val_seed
+                "seed": val_seed,
+                "norm_factor": train_set.norm_factor,
+                "gamma":train_set.gamma
 
             }
 
@@ -764,7 +959,8 @@ if __name__ == '__main__':
                 "x_ck": train_set.x_ck,
                 "translation": train_set.translation,
                 "rotation": train_set.rotation,
-                "seed": test_seed
+                "seed": test_seed,
+                "gamma": train_set.gamma
 
             }
 
@@ -785,6 +981,8 @@ if __name__ == '__main__':
             val_config["x_ck"] = train_set.x_ck
             val_config["translation"] = train_set.translation
             val_config["rotation"] = train_set.rotation
+            val_config["norm_factor"] = train_set.norm_factor
+            val_config["gamma"] = train_set.gamma
             val_set = RandomSphere(**val_config)
 
             # test set
@@ -792,6 +990,8 @@ if __name__ == '__main__':
             test_config["x_ck"] = train_set.x_ck
             test_config["translation"] = train_set.translation
             test_config["rotation"] = train_set.rotation
+            test_config["norm_factor"] = train_set.norm_factor
+            test_config["gamma"] = train_set.gamma
             test_set = RandomSphere(**test_config)
 
     train_set_fn = os.path.join(args.save_dir, "train_set.pt")

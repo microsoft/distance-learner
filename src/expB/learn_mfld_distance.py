@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import time
 import copy
 import random
@@ -40,10 +41,10 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-from spheres import RandomSphere, TwoRandomSpheres
+from spheres_v2 import RandomSphere, TwoRandomSpheres
 from ptcifar.models import ResNet18
 from myNNs import *
-
+from workspace import *
 
 
 
@@ -59,6 +60,11 @@ def seed_worker(worker_id):
     random.seed(worker_seed)
 
 
+
+def weighted_mse_loss(inp, target, weight):
+        return (weight.reshape(-1) * (inp - target) ** 2).mean()
+
+
 def custom_histogram_adder(writer, model, current_epoch):
        
         # iterating through all parameters
@@ -66,12 +72,11 @@ def custom_histogram_adder(writer, model, current_epoch):
           
             writer.add_histogram(name,params,current_epoch)
 
-def weighted_mse_loss(inp, target, weight):
-        return (weight.reshape(-1) * (inp - target) ** 2).mean()
 
-def train(model, optimizer, loss_func, dataloaders, device,\
-          num_epochs, save_dir, scheduler, task="regression", name="MLP_512x4_in1000",\
-          scheduler_params={"warmup": 10, "cooldown": 300}):
+def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,\
+          feature_name="normed_points", target_name="normed_distances",\
+          num_epochs=500, task="regression", name="MLP_512x4_in1000",\
+          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None):
     """
         Function to train the model. Also dumps the best model.
         
@@ -91,19 +96,93 @@ def train(model, optimizer, loss_func, dataloaders, device,\
     save_dir = os.path.join(save_dir, name)
     model_dir = os.path.join(save_dir, TIME_STAMP, "models")
     plot_dir = os.path.join(save_dir, TIME_STAMP, "tensorboard")
+    specs_dump_fn = os.path.join(save_dir, TIME_STAMP, "specs.json")
     
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
     os.makedirs(plot_dir, exist_ok=True)
+
+    with open(specs_dump_fn, "w+") as f:
+        json.dump(specs_dict, f)
     
     plot_fn = os.path.join(plot_dir, name + "_" + TIME_STAMP)
 
     writer = SummaryWriter(plot_fn)
     # liveloss = PlotLosses(fig_path=plot_fn)
     
-    if task == "regression":
+    def plotDataIn3D(points_n):
+        
+        if points_n.shape[1] == 2:
+            plt.figure(figsize = (10,7))
+            fig_plot = plt.scatter(points_n[:, 0], points_n[:, 1], s=0.1).get_figure()
+            plt.close(fig_plot)
+        else:
+            fig = plt.figure(figsize = (10, 7))
+            ax1 = plt.axes(projection ="3d")
+            fig_plot = ax1.scatter3D(points_n[:, 0], points_n[:, 1], points_n[:, 2], s=0.1).get_figure()
+            plt.close(fig_plot)
+        return fig_plot
+
+    if hasattr(dataloaders["train"].dataset, "distances"):
         writer.add_histogram("train/distances", dataloaders["train"].dataset.distances)
         writer.add_histogram("val/distances", dataloaders["val"].dataset.distances)
+
+        # plt.figure(figsize = (10,7))
+        # fig_train = plt.scatter(dataloaders["train"].dataset.points_n[:, 0], dataloaders["train"].dataset.points_n[:, 1], s=0.01).get_figure()
+        # plt.close(fig_train)
+        fig_train = plotDataIn3D(dataloaders["train"].dataset.points_n)
+        writer.add_figure("train/points_n", fig_train)
+        writer.add_text("train/data/params", str(vars(dataloaders["train"].dataset)))
+
+        # plt.figure(figsize = (10,7))
+        # fig_val = plt.scatter(dataloaders["val"].dataset.points_n[:, 0], dataloaders["val"].dataset.points_n[:, 1], s=0.01).get_figure()
+        # plt.close(fig_val)
+        fig_val = plotDataIn3D(dataloaders["val"].dataset.points_n)
+        writer.add_figure("val/points_n", fig_val)
+        writer.add_text("train/val/params", str(vars(dataloaders["val"].dataset)))
+
+        writer.add_graph(model, dataloaders["train"].dataset.points_n[:dataloaders["train"].batch_size])
+
+    elif hasattr(dataloaders["train"].dataset, "all_distances"):
+        
+        for phase in ["train", "val"]:
+            writer.add_histogram(phase + "/S1/distances", dataloaders[phase].dataset.all_distances[:, 0])
+            writer.add_histogram(phase + "/S2/distances", dataloaders[phase].dataset.all_distances[:, 1])
+
+            writer.add_histogram(phase + "/S1/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 0])
+            writer.add_histogram(phase + "/S2/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 1])
+
+        
+        capture_attrs =  ["S1_config", "S2_config", "n", "seed"]
+
+        for phase in ["train", "val"]:
+            fig = plotDataIn3D(dataloaders[phase].dataset.all_points)
+            writer.add_figure(phase + "/all_points", fig)
+            data_vars = vars(dataloaders[phase].dataset)
+            writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
+
+        
+
+        writer.add_graph(model, dataloaders["train"].dataset.normed_all_points[:dataloaders["train"].batch_size])
+
+
+    else:
+        writer.add_histogram("train/distances", dataloaders["train"].dataset.tensors[1])
+        writer.add_histogram("val/distances", dataloaders["val"].dataset.tensors[1])
+
+        # plt.figure(figsize = (10,7))
+        # fig_train = plt.scatter(dataloaders["train"].dataset.tensors[0][:, 0], dataloaders["train"].dataset.tensors[0][:, 1], s=0.01).get_figure()
+        # plt.close(fig_train)
+        fig_train = plotDataIn3D(dataloaders["train"].dataset.tensors[0])
+        writer.add_figure("train/points_n", fig_train)
+
+        # plt.figure(figsize = (10,7))
+        # fig_val = plt.scatter(dataloaders["val"].dataset.tensors[0][:, 0], dataloaders["val"].dataset.tensors[0][:, 1], s=0.01).get_figure()
+        # plt.close(fig_val)
+        fig_val = plotDataIn3D(dataloaders["val"].dataset.tensors[0])
+        writer.add_figure("val/points_n", fig_val)
+
+        writer.add_graph(model, dataloaders["train"].dataset.tensors[0][:dataloaders["train"].batch_size])    
 
     phase = "train"
     
@@ -123,7 +202,7 @@ def train(model, optimizer, loss_func, dataloaders, device,\
         
         for phase in ["train", "val"]:
             
-            all_logits = torch.zeros(len(dataloaders[phase].dataset))
+            all_logits = None
 
             dl = dataloaders[phase]
             
@@ -149,10 +228,17 @@ def train(model, optimizer, loss_func, dataloaders, device,\
             
             for (i, batch) in enumerate(dataloaders[phase]):
                 
-                points = batch[0].to(device)
-                distances = batch[1].to(device)
+                def get_data(batch_dict, feature_name=feature_name, target_name=target_name):
+                    return batch_dict[feature_name], batch_dict[target_name]
+                
+                points, distances = get_data(batch)
+
+                points = points.to(device)
+                distances = distances.to(device)
                 # classes = batch[2].to(device)
                 
+                
+
                 model = model.to(device)
                 
                 logits = None
@@ -161,6 +247,8 @@ def train(model, optimizer, loss_func, dataloaders, device,\
                         logits = model(points)
                 elif phase == "train":
                     logits = model(points)
+
+                # print(points.shape, distances.shape, logits.shape)
 
                 # weights in case of weighted loss
                 # weights = distances.clone().detach()
@@ -185,7 +273,9 @@ def train(model, optimizer, loss_func, dataloaders, device,\
                 elif phase == "val":
                     val_loss_matrix[epoch, i] = loss.detach().cpu().item()
                 
-                all_logits[i*points.shape[0]:(i+1)*points.shape[0]] = logits.detach().cpu().reshape(-1)
+                if all_logits is None:
+                    all_logits = torch.zeros(len(dataloaders[phase].dataset), logits.shape[1])
+                all_logits[i*points.shape[0]:(i+1)*points.shape[0]] = logits.detach().cpu()
 
                 num_batches += 1
                 
@@ -212,7 +302,11 @@ def train(model, optimizer, loss_func, dataloaders, device,\
             if phase == "train":
                 custom_histogram_adder(writer, model, epoch)
             
-            writer.add_histogram(phase + "/logits", all_logits, epoch)
+            if all_logits.shape[1] == 1:
+                writer.add_histogram(phase + "/logits", all_logits.reshape(-1), epoch)
+            else:
+                for idx in range(all_logits.shape[1]):
+                    writer.add_histogram(phase + "/S" + str(idx+1) + "/logits", all_logits[:, idx].reshape(-1), epoch)
             
         
         check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss or epoch == 100
@@ -239,7 +333,7 @@ def train(model, optimizer, loss_func, dataloaders, device,\
                 dump["f1"] = logs["f1"]
                 dump["val_f1"] = logs["val_f1"]
                 
-            torch.save(dump, os.path.join(model_dir, NAME + "_"+ TIME_STAMP + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
+            torch.save(dump, os.path.join(model_dir, name + "_"+ TIME_STAMP + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
 
         
         logs["lr"] = optimizer.param_groups[0]["lr"]
@@ -260,21 +354,30 @@ def train(model, optimizer, loss_func, dataloaders, device,\
                     
             
 
-def test(model, dataloader, device, task="regression"):
+def test(model, dataloader, device, task="regression",\
+     feature_name="normed_points", target_name="normed_distances"):
     
     model.eval()
     
     all_logits = None
-    all_distances = None
+    all_targets = None
     # all_true_distances = None
-    all_classes = None
+    # all_classes = None
     
     with torch.no_grad():
         
         for batch in dataloader:
             # print(len(batch))
-            points = batch[0].to(device)
-            distances = batch[1].to(device)
+            def get_data(batch_dict, feature_name=feature_name, target_name=target_name):
+                return batch_dict[feature_name], batch_dict[target_name]
+        
+            points, targets = get_data(batch, feature_name=feature_name, target_name=target_name)
+
+            points = points.to(device)
+            targets = targets.to(device)
+
+            # points = batch[0].to(device)
+            # distances = batch[1].to(device)
             # classes = batch[2].to(device)
             
             model.zero_grad()
@@ -291,37 +394,39 @@ def test(model, dataloader, device, task="regression"):
             else:
                 all_logits = torch.cat((all_logits, logits))
             
-            if all_distances is None:
-                all_distances = distances
+            if all_targets is None:
+                all_targets = targets
             else:
-                all_distances = torch.cat((all_distances, distances))
+                all_targets = torch.cat((all_targets, targets))
 
-            if task == "classification":
-                if all_classes is None:
-                    all_classes = classes
-                else:
-                    all_classes = torch.cat((all_classes, classes))
+            # if task == "classification":
+            #     if all_classes is None:
+            #         all_classes = classes
+            #     else:
+            #         all_classes = torch.cat((all_classes, classes))
             
             
     if task == "regression":
-        mse = mean_squared_error(all_distances, all_logits)
-        mse_on_mfld = mean_squared_error(all_distances[np.round(all_distances) == 0], all_logits[np.round(all_distances) == 0])
+        mse = mean_squared_error(all_targets, all_logits)
+        mse_on_mfld = mean_squared_error(all_targets[np.round(all_targets) == 0], all_logits[np.round(all_targets) == 0])
 
 
 
         print("MSE for the learned distances:", mse)
         print("MSE for the learned distances (on-manifold):", mse_on_mfld)
-        return mse, mse_on_mfld, all_distances, all_logits
+        return mse, mse_on_mfld, all_targets, all_logits
     
     elif task == "clf":
         y_pred = torch.max(all_logits, axis=1)[1]
-        print(classification_report(all_classes.reshape(-1), y_pred))
-        acc = accuracy_score(all_classes.reshape(-1), y_pred)
-        f1 = f1_score(all_classes.reshape(-1), y_pred)
+        print(classification_report(all_targets.reshape(-1), y_pred))
+        acc = accuracy_score(all_targets.reshape(-1), y_pred)
+        f1 = f1_score(all_targets.reshape(-1), y_pred)
         
-        return acc, f1, all_distances, y_pred
+        return acc, f1, all_targets, all_logits
     
     #TODO: fix this for concentric dataset
+
+
 
 
 
@@ -329,12 +434,15 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--train", action="store_true", help="enable train mode")
+    parser.add_argument("--train", action="store_true", help="enable train mode", required=True)
+
+    parser.add_argument("--specs", type=str, help="specifications file for the experiment, removes need for all other options", default=None)
+
     parser.add_argument("--batch_size", type=int, help="batch size")
-    parser.add_argument("--cuda", action="store_true", help="use GPUs")    
+    parser.add_argument("--cuda", help="use GPUs", default=None)    
     parser.add_argument("--task", type=str, help="'classification' or 'regression'", default="regression")
     parser.add_argument("--num_epochs", type=int, help="number of epochs", default=500)
-    parser.add_argument("--savedir", type=str, help="save directory path")
+    parser.add_argument("--save_dir", type=str, help="save directory path")
     parser.add_argument("--name", type=str, help="name of experiment")
     parser.add_argument("--warmup", type=int, help="number of warmup steps", default=10)
     parser.add_argument("--cooldown", type=int, help="epoch after which to cooldown", default=300)
@@ -347,14 +455,69 @@ if __name__ == '__main__':
     parser.add_argument("--train_fn", type=str, help="path to train data") 
     parser.add_argument("--val_fn", type=str, help="path to val data") 
     parser.add_argument("--test_fn", type=str, help="path to test data")
+    parser.add_argument("--ftname", type=str, help="named attribute for features when fetching dataset", default="normed_points") 
+    parser.add_argument("--tgtname", type=str, help="named attribute for labels when fetching dataset", default="normed_distances") 
     
     args = parser.parse_args()
 
-    if args.train:
+
+    TRAIN_FLAG = args.train
+    BATCH_SIZE = args.batch_size
+    CUDA = args.cuda
+    TASK = args.task
+    NUM_EPOCHS = args.num_epochs
+    SAVE_DIR = args.save_dir
+    NAME = args.name
+
+    WARMUP = args.warmup
+    COOLDOWN = args.cooldown
+    LR = args.lr
+
+    INIT_WTS = args.init_wts
+    NUM_CLASSES = args.num_classes
+    INPUT_SIZE = args.input_size
+
+    TRAIN_FN = args.train_fn
+    VAL_FN = args.val_fn
+    TEST_FN = args.test_fn
+
+    FTNAME = args.ftname
+    TGTNAME = args.tgtname
+
+
+    specs_dict = {
+        "batch_size": args.batch_size,
+        "cuda": args.cuda,
+        "task": args.task,
+        "num_epochs": args.num_epochs,
+        "save_dir": args.save_dir,
+        "name": args.name,
+        "warmup": args.warmup,
+        "cooldown": args.cooldown,
+        "lr": args.lr,
+        "init_wts": args.init_wts,
+        "num_classes": args.num_classes,
+        "input_size": args.input_size,
+        "train_fn": args.train_fn,
+        "val_fn": args.val_fn,
+        "test_fn": args.test_fn,
+        "ftname": args.ftname,
+        "tgtname": args.tgtname
+    }
+
+    # if specs file is provided, override all past values
+    if args.specs is not None:
+
+        specs_dict = json.load(open(args.specs))
+        BATCH_SIZE, CUDA, TASK, NUM_EPOCHS, SAVE_DIR, NAME,\
+            WARMUP, COOLDOWN, LR, INIT_WTS, NUM_CLASSES, INPUT_SIZE,\
+            TRAIN_FN,VAL_FN, TEST_FN, FTNAME, TGTNAME = load_specs(specs_dict)
+
+
+    if TRAIN_FLAG:
         
-        
-        train_set = torch.load(args.train_fn)
-        val_set = torch.load(args.val_fn)
+        train_set = torch.load(TRAIN_FN)
+        val_set = torch.load(VAL_FN)
         
         
         # train_perm = torch.randperm(train_set.N)
@@ -375,41 +538,39 @@ if __name__ == '__main__':
         # val_set.points_n = val_set.points_n
         # val_set.distances = val_set.distances
 
-        BATCH_SIZE = args.batch_size 
         NUM_WORKERS = 8
 
         dataloaders = {
-            "train": DataLoader(dataset=train_set, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker),
-            "val": DataLoader(dataset=val_set, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
+            "train": DataLoader(dataset=train_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker),
+            "val": DataLoader(dataset=val_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
         }  
 
-        device = torch.device("cuda:1" if torch.cuda.is_available() and args.cuda else "cpu")
+        device = torch.device("cuda:{}".format(CUDA) if torch.cuda.is_available() and CUDA else "cpu")
 
-        model = MLP(input_size=args.input_size, output_size=args.num_classes, hidden_sizes=[512, 256, 128, 64])
+        model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+        # model = MLP(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, use_tanh=False)
         # model = ResNet18(num_classes=args.num_classes)
         if args.init_wts is not None:
-            model.load_state_dict(torch.load(args.init_wts))
+            model.load_state_dict(torch.load(INIT_WTS))
         
         
         loss_func = nn.MSELoss()
         # loss_func = weighted_mse_loss
         if args.task == "classification":
             loss_func = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=args.lr)
+        optimizer = optim.Adam(model.parameters(), lr=LR)
 
         # optimizer = optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
 
-        NUM_EPOCHS = args.num_epochs 
-        scheduler_params = {"warmup": args.warmup, "cooldown": args.cooldown}
+        NUM_EPOCHS = NUM_EPOCHS 
+        scheduler_params = {"warmup": WARMUP, "cooldown": COOLDOWN}
         lr_sched_factor = lambda epoch: epoch / (scheduler_params["warmup"]) if epoch <= scheduler_params["warmup"] else (1 if epoch > scheduler_params["warmup"] and epoch < scheduler_params["cooldown"] else max(0, 1 + (1 / (scheduler_params["cooldown"] - NUM_EPOCHS)) * (epoch - scheduler_params["cooldown"])))
 
         scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_sched_factor)
 
-        NAME = args.name
-        SAVE_DIR = args.savedir
 
-        task = args.task
+
 
         model, optimizer, train_loss_matrix, val_loss_matrix = train(model=model, optimizer=optimizer, loss_func=loss_func, dataloaders=dataloaders,\
-                         device=device, task=args.task,num_epochs=NUM_EPOCHS, save_dir=SAVE_DIR,\
-                         name=NAME, scheduler=scheduler, scheduler_params=scheduler_params)
+                         device=device, task=TASK, num_epochs=NUM_EPOCHS, save_dir=SAVE_DIR, feature_name=FTNAME, target_name=TGTNAME,\
+                         name=NAME, scheduler=scheduler, scheduler_params=scheduler_params, specs_dict=specs_dict)

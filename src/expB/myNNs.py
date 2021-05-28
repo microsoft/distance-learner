@@ -40,23 +40,114 @@ from ptcifar.models import ResNet18
 
 
 class MLP(nn.Module):
-    
-    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512]):
+
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], use_tanh=True, use_relu=True):
         
         super(MLP, self).__init__()
         
         self.input_size = input_size
+        self.output_size = output_size
         self.hidden_sizes = hidden_sizes
-        
+        self.use_tanh = use_tanh
+        self.use_relu = use_relu
+
         layers = [("fcn-0", nn.Linear(self.input_size, hidden_sizes[0])), ("relu-0", nn.ReLU())]
         
         for i in range(len(hidden_sizes) - 1):
+            
+            
+            layers.append(
+                ("fcn-{n}".format(n=i+1), nn.Linear(hidden_sizes[i], hidden_sizes[i+1]))
+            )
 
-            layers.append(("fcn-{n}".format(n=i+1), nn.Linear(hidden_sizes[i], hidden_sizes[i+1])))
-            layers.append(("relu-{n}".format(n=i+1), nn.ReLU()))
+            layers.append(
+                ("relu-{n}".format(n=i+1), nn.ReLU())
+            )
+
+
+
+            
                     
         layers.append(("fcn-" + str(len(hidden_sizes)), nn.Linear(hidden_sizes[-1], output_size)))
-        layers.append(("relu-" + str(len(hidden_sizes)), nn.ReLU()))
+        if not self.use_tanh:
+            if not self.use_relu:
+                layers.append(("sigmoid-" + str(len(hidden_sizes)), nn.Sigmoid()))
+            else:
+                layers.append(("relu-" + str(len(hidden_sizes)), nn.ReLU()))
+        else:
+            layers.append(("tanh-" + str(len(hidden_sizes)), nn.Tanh()))
+
+
+        self.layers = nn.Sequential(OrderedDict(layers))
+        
+    def forward(self, X):
+        logits = self.layers(X)
+        return logits
+
+class MLPwithNormalisation(nn.Module):
+    
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], weight_norm=True, use_tanh=True, use_relu=True):
+        
+        super(MLPwithNormalisation, self).__init__()
+        
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_sizes = hidden_sizes
+        self.weight_norm = weight_norm
+        self.use_tanh = use_tanh
+        self.use_relu = use_relu
+
+        layers = None
+
+        if not self.weight_norm:
+
+            layers = [("fcn-0", nn.Linear(self.input_size, hidden_sizes[0])), ("bn-0", nn.LayerNorm(hidden_sizes[0])), ("relu-0", nn.ReLU())]
+        
+        else:
+
+            layers =  [("fcn-0", nn.utils.weight_norm(nn.Linear(self.input_size, hidden_sizes[0]))), ("relu-0", nn.ReLU())]
+
+
+        for i in range(len(self.hidden_sizes) - 1):
+            
+            
+
+            if not self.weight_norm:
+                layers.append(
+                    ("fcn-{n}".format(n=i+1), nn.Linear(hidden_sizes[i], hidden_sizes[i+1]))
+                )
+            
+
+                layers.append(
+                    ("bn-{n}".format(n=i+1), nn.LayerNorm(hidden_sizes[i+1]))
+                )
+
+            else:
+                layers.append(
+                    ("fcn-{n}".format(n=i+1), nn.utils.weight_norm(nn.Linear(hidden_sizes[i], hidden_sizes[i+1])))
+                )
+
+            layers.append(
+                    ("relu-{n}".format(n=i+1), nn.ReLU())
+            )
+
+            
+
+            
+        # last layer  
+        layers.append(("fcn-" + str(len(hidden_sizes)), nn.Linear(hidden_sizes[-1], output_size)))
+
+        if not self.use_tanh:
+            if self.use_relu:
+                # my own addition
+                layers.append(("relu-" + str(len(hidden_sizes)), nn.ReLU()))
+            else:
+                layers.append(("sigmoid-" + str(len(hidden_sizes)), nn.Sigmoid()))
+        else:
+            layers.append(("tanh-" + str(len(hidden_sizes)), nn.Tanh()))
+
+        # last tanh mandatory like the paper
+        # layers.append(("th", nn.Tanh()))
 
 
         self.layers = nn.Sequential(OrderedDict(layers))

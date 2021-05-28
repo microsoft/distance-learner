@@ -137,7 +137,7 @@ class MLPDistRegressor(pl.LightningModule):
         # self.model = ResNet18(num_classes=1)
         # self.model.load_state_dict(torch.load(init_wts_fn))
         self.model = MLP(input_size=2, output_size=1, hidden_sizes=[512, 256, 128, 64])
-        
+        # self.model = MLPwithNormalisation
         
     def forward(self, x):
         

@@ -71,9 +71,12 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
-    def __init__(self, block, num_blocks, num_classes=10):
+    def __init__(self, block, num_blocks, num_classes=10, use_sigmoid=True, use_relu=False, use_tanh=False):
         super(ResNet, self).__init__()
         self.in_planes = 64
+        self.use_relu = use_relu
+        self.use_sigmoid = use_sigmoid
+        self.use_tanh = use_tanh
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3,
                                stride=1, padding=1, bias=False)
@@ -83,6 +86,15 @@ class ResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, num_blocks[2], stride=2)
         self.layer4 = self._make_layer(block, 512, num_blocks[3], stride=2)
         self.linear = nn.Linear(512*block.expansion, num_classes)
+
+        self.act = None
+
+        if self.use_relu:
+            self.act = nn.ReLU()
+        elif self.use_tanh:
+            self.act = nn.Tanh()
+        elif self.use_sigmoid:
+            self.act = nn.Sigmoid()
 
     def _make_layer(self, block, planes, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
@@ -102,12 +114,13 @@ class ResNet(nn.Module):
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)
-        out = F.relu(out)
+        if self.act is not None:
+            out = self.act(out)
         return out
 
 
-def ResNet18(num_classes):
-    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes)
+def ResNet18(num_classes, use_relu=False, use_sigmoid=True, use_tanh=False):
+    return ResNet(BasicBlock, [2, 2, 2, 2], num_classes, use_relu=use_relu, use_sigmoid=use_sigmoid, use_tanh=use_tanh)
 
 
 def ResNet34():

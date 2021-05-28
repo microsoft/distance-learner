@@ -1,0 +1,19 @@
+{
+    "batch_size": 512,
+    "cuda": 1,
+    "task": "regression",
+    "num_epochs": 500,
+    "save_dir": "/azuredrive/dumps/expB_learning_distance_from_mfld/vary_k_for_fixed_n",
+    "name": "test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm}_data{sphere_in_unit_cube;n=1000;k=5}",
+    "warmup": 10,
+    "cooldown": 300,
+    "lr": 1e-5,
+    "init_wts": null,
+    "num_classes": 1,
+    "input_size": 1000,
+    "train_fn": "/azuredrive/datasets/expB/one_sphere/k=5,n=1000,r=0.5/train_set.pt",
+    "val_fn": "/azuredrive/datasets/expB/one_sphere/k=5,n=1000,r=0.5/val_set.pt",
+    "test_fn": "/azuredrive/datasets/expB/one_sphere/k=5,n=1000,r=0.5/test_set.pt",
+    "ftname": "points_n",
+    "tgtname": "distances"
+}
