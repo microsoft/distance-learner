@@ -294,6 +294,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
 
                 logs[prefix + "f1"] = f1
                 logs[prefix + "acc"] = acc
+
+                writer.add_scalar(phase + "/f1", logs[prefix + "f1"], epoch)
+                writer.add_scalar(phase + "/acc", logs[prefix + "acc"], epoch)
+
                     
             
             # dividing by the number of batches
@@ -302,6 +306,8 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             if phase == "train":
                 custom_histogram_adder(writer, model, epoch)
             
+            
+
             if all_logits.shape[1] == 1:
                 writer.add_histogram(phase + "/logits", all_logits.reshape(-1), epoch)
             else:
@@ -355,7 +361,8 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             
 
 def test(model, dataloader, device, task="regression",\
-     feature_name="normed_points", target_name="normed_distances"):
+     feature_name="normed_points", target_name="normed_distances",\
+     save_dir=None, specs_dict=None, name="data"):
     
     model.eval()
     
@@ -386,7 +393,7 @@ def test(model, dataloader, device, task="regression",\
             logits = model(points).detach().cpu()
 
             points = points.cpu()
-            distances = distances.cpu()
+            targets = targets.cpu()
             model = model.cpu()
             
             if all_logits is None:
@@ -405,10 +412,33 @@ def test(model, dataloader, device, task="regression",\
             #     else:
             #         all_classes = torch.cat((all_classes, classes))
             
-            
+    print("name:", name)
+
+    targets_fn, logits_fn, specs_fn = None, None, None
+
+    if save_dir is not None:
+        
+        # TIME_STAMP = time.strftime("%d%m%Y-%H%M%S")
+        save_dir = os.path.join(save_dir, "logits", name)
+
+        os.makedirs(save_dir, exist_ok=True)
+
+        targets_fn = os.path.join(save_dir, "targets.pt")
+        logits_fn = os.path.join(save_dir, "logits.pt")
+        specs_fn = os.path.join(save_dir, "specs.json")
+
+        
+        with open(specs_fn, "w+") as f:
+            json.dump(specs_dict, f)
+
+    # print(targets_fn)
     if task == "regression":
         mse = mean_squared_error(all_targets, all_logits)
         mse_on_mfld = mean_squared_error(all_targets[np.round(all_targets) == 0], all_logits[np.round(all_targets) == 0])
+
+        if save_dir is not None:
+            torch.save(all_targets, targets_fn)
+            torch.save(all_logits, logits_fn)
 
 
 
@@ -422,9 +452,20 @@ def test(model, dataloader, device, task="regression",\
         acc = accuracy_score(all_targets.reshape(-1), y_pred)
         f1 = f1_score(all_targets.reshape(-1), y_pred)
         
+        if save_dir is not None:
+            torch.save(all_targets, targets_fn)
+            torch.save(all_logits, logits_fn)
+
+
+
+
         return acc, f1, all_targets, all_logits
     
-    #TODO: fix this for concentric dataset
+    
+
+    print("\n")
+
+    
 
 
 
@@ -434,7 +475,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--train", action="store_true", help="enable train mode", required=True)
+    parser.add_argument("--train", action="store_true", help="enable train mode", required=False)
+    parser.add_argument("--test", action="store_true", help="compute and store predictions on all splits", required=False)
+
 
     parser.add_argument("--specs", type=str, help="specifications file for the experiment, removes need for all other options", default=None)
 
@@ -455,6 +498,7 @@ if __name__ == '__main__':
     parser.add_argument("--train_fn", type=str, help="path to train data") 
     parser.add_argument("--val_fn", type=str, help="path to val data") 
     parser.add_argument("--test_fn", type=str, help="path to test data")
+    parser.add_argument("--data_fn", type=str, help="path to any other data")
     parser.add_argument("--ftname", type=str, help="named attribute for features when fetching dataset", default="normed_points") 
     parser.add_argument("--tgtname", type=str, help="named attribute for labels when fetching dataset", default="normed_distances") 
     
@@ -462,6 +506,7 @@ if __name__ == '__main__':
 
 
     TRAIN_FLAG = args.train
+    TEST_FLAG = args.test
     BATCH_SIZE = args.batch_size
     CUDA = args.cuda
     TASK = args.task
@@ -480,6 +525,7 @@ if __name__ == '__main__':
     TRAIN_FN = args.train_fn
     VAL_FN = args.val_fn
     TEST_FN = args.test_fn
+    DATA_FN = args.data_fn
 
     FTNAME = args.ftname
     TGTNAME = args.tgtname
@@ -540,6 +586,24 @@ if __name__ == '__main__':
 
         NUM_WORKERS = 8
 
+        # this is specific to the `TwoSpheres` case; done  
+        # so that we only train on on-manifold samples
+        if TASK == "clf":
+            OFF_MFLD_LABEL = 2
+
+            train_set.all_points = train_set.all_points[train_set.class_labels != OFF_MFLD_LABEL]
+            train_set.all_distances = train_set.all_distances[train_set.class_labels != OFF_MFLD_LABEL]
+            train_set.normed_all_points = train_set.normed_all_points[train_set.class_labels != OFF_MFLD_LABEL]
+            train_set.normed_all_distances = train_set.normed_all_distances[train_set.class_labels != OFF_MFLD_LABEL]
+            train_set.class_labels = train_set.class_labels[train_set.class_labels != OFF_MFLD_LABEL]
+
+            val_set.all_points = val_set.all_points[val_set.class_labels != OFF_MFLD_LABEL]
+            val_set.all_distances = val_set.all_distances[val_set.class_labels != OFF_MFLD_LABEL]
+            val_set.normed_all_points = val_set.normed_all_points[val_set.class_labels != OFF_MFLD_LABEL]
+            val_set.normed_all_distances = val_set.normed_all_distances[val_set.class_labels != OFF_MFLD_LABEL]
+            val_set.class_labels = val_set.class_labels[val_set.class_labels != OFF_MFLD_LABEL]
+
+
         dataloaders = {
             "train": DataLoader(dataset=train_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker),
             "val": DataLoader(dataset=val_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
@@ -550,13 +614,13 @@ if __name__ == '__main__':
         model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
         # model = MLP(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, use_tanh=False)
         # model = ResNet18(num_classes=args.num_classes)
-        if args.init_wts is not None:
+        if INIT_WTS is not None:
             model.load_state_dict(torch.load(INIT_WTS))
         
         
         loss_func = nn.MSELoss()
         # loss_func = weighted_mse_loss
-        if args.task == "classification":
+        if TASK == "clf":
             loss_func = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=LR)
 
@@ -574,3 +638,53 @@ if __name__ == '__main__':
         model, optimizer, train_loss_matrix, val_loss_matrix = train(model=model, optimizer=optimizer, loss_func=loss_func, dataloaders=dataloaders,\
                          device=device, task=TASK, num_epochs=NUM_EPOCHS, save_dir=SAVE_DIR, feature_name=FTNAME, target_name=TGTNAME,\
                          name=NAME, scheduler=scheduler, scheduler_params=scheduler_params, specs_dict=specs_dict)
+
+    elif TEST_FLAG:
+        
+        phases = ["train", "val", "test"]
+        data_fns = [TRAIN_FN, VAL_FN, TEST_FN]
+
+        splits = {i[0]: {"fn": i[1], "name": i[0]} for i in zip(phases, data_fns)}
+        
+
+
+        for split in splits:
+            dataset = torch.load(splits[split]["fn"])
+            NUM_WORKERS = 8
+
+            dataloader = DataLoader(dataset=dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
+
+            device = torch.device("cuda:{}".format(CUDA) if torch.cuda.is_available() and CUDA else "cpu")
+
+            model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+
+            if INIT_WTS is None:
+                raise Exception("INIT_WTS needed for testing!")
+            
+            model.load_state_dict(torch.load(INIT_WTS)["model_state_dict"])
+
+            _, _, all_targets, all_logits = test(model=model, dataloader=dataloader,\
+                device=device, task=TASK, feature_name=FTNAME, target_name=TGTNAME, name=splits[split]["name"], save_dir=SAVE_DIR)
+
+
+    else:
+
+        dataset = torch.load(DATA_FN)
+        NUM_WORKERS = 8
+
+        dataloader = DataLoader(dataset=dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
+
+        device = torch.device("cuda:{}".format(CUDA) if torch.cuda.is_available() and CUDA else "cpu")
+
+        model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+
+        if INIT_WTS is None:
+            raise Exception("INIT_WTS needed for testing!")
+        
+        model.load_state_dict(torch.load(INIT_WTS)["model_state_dict"])
+
+        _, _, all_targets, all_logits = test(model=model, dataloader=dataloader,\
+             device=device, task=TASK, feature_name=FTNAME, target_name=TGTNAME, name=NAME)
+
+
+

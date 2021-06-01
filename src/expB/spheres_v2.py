@@ -668,6 +668,7 @@ class TwoRandomSpheres(Dataset):
         if self.S1_config["n"] != self.S2_config["n"]:
             raise RuntimeError("higher dimension size `n` should match for both spheres")
         self.n = self.S1_config["n"]
+        self.N = self.S1_config["N"] + self.S2_config["N"]
 
         # we do not normalize now, since all this will be eventually normalized as a complete dataset
         self.S1 = RandomSphere(**S1_config, normalize=False, gamma=None, norm_factor=None)
@@ -844,6 +845,10 @@ if __name__ == '__main__':
 
     os.makedirs(args.save_dir, exist_ok=True)
 
+    config = None
+    train_config = None
+    val_config = None
+    test_config = None
 
     if args.twospheres:
 
@@ -1001,6 +1006,18 @@ if __name__ == '__main__':
     torch.save(train_set, train_set_fn)
     torch.save(val_set, val_set_fn)
     torch.save(test_set, test_set_fn)
+
+    if not args.twospheres and config is None:
+        config = {
+            "train": train_config,
+            "val": val_config,
+            "test": test_config
+        }
+
+    dump_config_fn = os.path.join(args.save_dir, "config.pt")
+    with open(dump_config_fn, "wb") as f:
+        torch.save(config, f)
+    
             
 
 
