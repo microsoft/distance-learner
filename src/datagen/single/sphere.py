@@ -3,8 +3,11 @@ import sys
 import json
 import time
 import random
+from collections.abc import Iterable
 
 import numpy as np
+
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import Dataset
@@ -14,7 +17,7 @@ from manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
 
 class SpecificSphereAttrs(SpecificManifoldAttrs):
 
-    def __init__(self, mu=0, sigma=1, seed=42, n=100, r=0.5, x_ck=None):
+    def __init__(self, mu=0, sigma=1, seed=42, n=100, r=0.5, x_ck=None, **kwargs):
         """
         :param r: radius of the sphere
         :type r: float
@@ -159,7 +162,7 @@ class RandomSphere(Manifold, Dataset):
         return self._genattrs.points_n.shape[0]
 
     def __getitem__(self, idx):
-        # return self.points_n[idx], self.distances[idx]
+        # return self._genattrs.points_n[idx], self._genattrs.distances[idx]
         return {
             "points_n": self._genattrs.points_n[idx],
             "distances": self._genattrs.distances[idx],
@@ -179,7 +182,7 @@ class RandomSphere(Manifold, Dataset):
     def gen_points(self):
         """
             generating points in k-dim
-
+        
             reference: https://en.wikipedia.org/wiki/N-sphere#Uniformly_at_random_on_the_(n_%E2%88%92_1)-sphere 
         """
         points_k = np.random.normal(size=(self._genattrs.N - self._genattrs.num_neg, self._genattrs.k))
@@ -266,7 +269,7 @@ class RandomSphere(Manifold, Dataset):
         self._genattrs.distances = np.clip(self._genattrs.actual_distances, a_min=0, a_max=self._genattrs.D)
         
         # checking that the on-manifold points are still self.r away from center
-        # print(np.round(np.linalg.norm(self._genattrs.points_n[self.num_neg:] - self._genattrs.x_cn, axis=1, ord=2)))
+        # print(np.round(np.linalg.norm(self._genattrs.points_n[self._genattrs.num_neg:] - self._genattrs.x_cn, axis=1, ord=2)))
 
 
 
@@ -274,7 +277,7 @@ class RandomSphere(Manifold, Dataset):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
         if self._genattrs.norm_factor is None:
             # NOTE: using `_norm_factor` to set `norm_factor` in `self._genattrs`. DO NOT MAKE THIS A HABIT!!!
-            self._genattrs._norm_factor = self._genattrs.gamma * np.max(np.linalg.norm(self._genattrs.points_n - self._specattrs.x_cn, ord=2, axis=1))
+            self._genattrs._norm_factor = self._genattrs.gamma * np.max(np.linalg.norm(self._genattrs.points_n - self._specattrs.x_cn, ord=2, axis=1)).item()
             assert self._genattrs.norm_factor == self._genattrs._norm_factor
         self._genattrs.normed_points_n = self._genattrs.points_n / self._genattrs.norm_factor
         self._specattrs.normed_x_cn = self._specattrs.x_cn / self._genattrs.norm_factor
@@ -315,16 +318,293 @@ class RandomSphere(Manifold, Dataset):
             self.norm()
             print("[RandomSphere]: normalization complete")
 
-    def viz_test(self):
-        return super().viz_test()
+    def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):
+        """
+            generate plots that act as visual sanity checks
+            (only effective for `self._genattrs.n = 3`)
+            
+            1. distribution of distance labels from manifold
+            2. distribution of actual distances from manifold
+            3. on-manifold samples - trivial, translated and rotated in input 3 dims
+            4. off-manifold samples - pick one, find its coresponding index in self._genattrs.points_k,
+               transform it to the on-manifold sample, assert that the distance between the two is equal
+               to the distance label and plot this distance
 
-    def load_data(self):
-        return super().load_data()
+            NOTE: Status - Failing!! Rest of the API has progressed with no updates to this
+
+            TODO: Fix it!
+        """
+        
+        plt.hist(self._genattrs.distances.numpy())
+        plt.xlabel("clipped (D={d}) distances from manifold".format(d=self._genattrs.D))
+        plt.ylabel("frequency")
+        plt.title("distribution of label distances from the manifold")
+        plt.show()
+        
+        plt.hist(self._genattrs.actual_distances.numpy())
+        plt.xlabel("actual distances from manifold")
+        plt.ylabel("frequency")
+        plt.title("distribution of actual distances from the manifold")
+        plt.show()
+        
+        # plot the on-manifold examples
+        
+        on_mfld_idx = self._genattrs.distances.reshape(-1) == 0
+        off_mfld_idx = self._genattrs.distances.reshape(-1) != 0
+
+        # before translation
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n_trivial_[on_mfld_idx, dimX],\
+                      self._genattrs.points_n_trivial_[on_mfld_idx, dimY], self._genattrs.points_n_trivial_[on_mfld_idx, dimZ])
+        
+        plt.title("on-manifold samples (trivial embedding)")
+        plt.show()
+        
+        # before rotation
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n_tr_[on_mfld_idx, dimX],\
+                      self._genattrs.points_n_tr_[on_mfld_idx, dimY], self._genattrs.points_n_tr_[on_mfld_idx, dimZ])
+        
+        plt.title("on-manifold samples (after translation)")
+        plt.show()
+        
+        # after rotation
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n[on_mfld_idx, dimX],\
+                      self._genattrs.points_n[on_mfld_idx, dimY], self._genattrs.points_n[on_mfld_idx, dimZ])
+        
+        plt.title("on-manifold samples (after rotation)")
+        plt.show()
+        
+        
+        # plots for off-manifold samples
+        
+        #indices to show for pre-images
+        idx = np.random.choice(np.arange(self._genattrs.num_neg), num_pre_img)
+        
+        # trivial pre_image
+        
+        neg_pre_img = self._genattrs.points_k[off_mfld_idx]
+        neg_pre_img_trivial_ = np.zeros((self._genattrs.num_neg, self.n))
+        neg_pre_img_trivial_[:, :self.k] = neg_pre_img
+        
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n_trivial_[on_mfld_idx, dimX],\
+              self._genattrs.points_n_trivial_[on_mfld_idx, dimY],\
+              self._genattrs.points_n_trivial_[on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        
+        
+        
+        ax1.scatter3D(neg_pre_img_trivial_[:, dimX][idx],\
+                      neg_pre_img_trivial_[:, dimY][idx],\
+                      neg_pre_img_trivial_[:, dimZ][idx], color="green", marker="^", label="trivial pre-image", s=80)
+        
+        
+        
+        ax1.scatter3D(self._genattrs.points_n_trivial_[off_mfld_idx, dimX][idx],\
+                      self._genattrs.points_n_trivial_[off_mfld_idx, dimY][idx],\
+                      self._genattrs.points_n_trivial_[off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
+        
+        actual_distances_trivial_ = np.linalg.norm(neg_pre_img_trivial_\
+                               - self._genattrs.points_n_trivial_[off_mfld_idx], ord=2, axis=1)
+        
+        for i in idx:
+            ax1.plot([neg_pre_img_trivial_[:, dimX][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_trivial_[:, dimY][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_trivial_[:, dimZ][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_trivial_[:, dimX][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_trivial_[:, dimY][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_trivial_[:, dimZ][i], self._genattrs.points_n_trivial_[off_mfld_idx, dimZ][i]]),\
+                    "{:.2f}".format(actual_distances_trivial_[i].item()))
+        
+        
+        plt.legend()
+        plt.title("pre-image samples (trivial embedding)")
+        plt.show()
+        
+        plt.hist(np.linalg.norm(neg_pre_img_trivial_\
+                               - self._genattrs.points_n_trivial_[off_mfld_idx], ord=2, axis=1) - self._genattrs.actual_distances[off_mfld_idx].numpy().reshape(-1))
+        plt.ylabel("freq")
+        plt.xlabel("error value")
+        plt.title("error distribution for distance value from manifold (trivial)")
+        plt.show()
+        
+        
+        # translated pre_image
+        
+        
+        neg_pre_img_tr_ = neg_pre_img_trivial_ + self.translation
+        
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n_tr_[on_mfld_idx, dimX],\
+              self._genattrs.points_n_tr_[on_mfld_idx, dimY],\
+              self._genattrs.points_n_tr_[on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        
+        
+        ax1.scatter3D(neg_pre_img_tr_[:, dimX][idx],\
+                      neg_pre_img_tr_[:, dimY][idx],\
+                      neg_pre_img_tr_[:, dimZ][idx], color="green", marker="^", label="translated pre-image", s=80)
+        
+        
+        
+        ax1.scatter3D(self._genattrs.points_n_tr_[off_mfld_idx, dimX][idx],\
+                      self._genattrs.points_n_tr_[off_mfld_idx, dimY][idx],\
+                      self._genattrs.points_n_tr_[off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
+        
+        for i in idx:
+            ax1.plot([neg_pre_img_tr_[:, dimX][i], self._genattrs.points_n_tr_[off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_tr_[:, dimY][i], self._genattrs.points_n_tr_[off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_tr_[:, dimZ][i], self._genattrs.points_n_tr_[off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_tr_[:, dimX][i], self._genattrs.points_n_tr_[off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_tr_[:, dimY][i], self._genattrs.points_n_tr_[off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_tr_[:, dimZ][i], self._genattrs.points_n_tr_[off_mfld_idx, dimZ][i]]),\
+                    "{:.2f}".format(self._genattrs.actual_distances[i].item()))
+        
+        
+        plt.legend()
+        plt.title("pre-image samples (translated embedding)")
+        plt.show()
+        
+        plt.hist(np.linalg.norm(neg_pre_img_tr_\
+                               - self._genattrs.points_n_tr_[off_mfld_idx], ord=2, axis=1) - self._genattrs.actual_distances[off_mfld_idx].numpy().reshape(-1))
+        plt.ylabel("freq")
+        plt.xlabel("error value")
+        plt.title("error distribution for distance value from manifold (tanslated)")
+        plt.show()
+        
+        
+        # rotated pre_image
+        
+        
+        neg_pre_img_rot_ = np.dot(self.rotation, neg_pre_img_tr_.T).T
+        
+        fig = plt.figure(figsize = (10, 7))
+        ax1 = plt.axes(projection ="3d")
+        
+        ax1.scatter3D(self._genattrs.points_n_rot_[on_mfld_idx, dimX],\
+              self._genattrs.points_n_rot_[on_mfld_idx, dimY],\
+              self._genattrs.points_n_rot_[on_mfld_idx, dimZ], color="blue", label="on-manifold", s=1, marker="1")
+        
+        
+        ax1.scatter3D(neg_pre_img_rot_[:, dimX][idx],\
+                      neg_pre_img_rot_[:, dimY][idx],\
+                      neg_pre_img_rot_[:, dimZ][idx], color="green", marker="^", label="rotated pre-image", s=80)
+        
+        
+        
+        ax1.scatter3D(self._genattrs.points_n_rot_[off_mfld_idx, dimX][idx],\
+                      self._genattrs.points_n_rot_[off_mfld_idx, dimY][idx],\
+                      self._genattrs.points_n_rot_[off_mfld_idx, dimZ][idx], color="red", label="off-manifold")
+        
+        for i in idx:
+            ax1.plot([neg_pre_img_rot_[:, dimX][i], self._genattrs.points_n_rot_[off_mfld_idx, dimX][i]],\
+                    [neg_pre_img_rot_[:, dimY][i], self._genattrs.points_n_rot_[off_mfld_idx, dimY][i]],\
+                    [neg_pre_img_rot_[:, dimZ][i], self._genattrs.points_n_rot_[off_mfld_idx, dimZ][i]], color="black")
+            ax1.text(np.mean([neg_pre_img_rot_[:, dimX][i], self._genattrs.points_n_rot_[off_mfld_idx, dimX][i]]),\
+                    np.mean([neg_pre_img_rot_[:, dimY][i], self._genattrs.points_n_rot_[off_mfld_idx, dimY][i]]),\
+                    np.mean([neg_pre_img_rot_[:, dimZ][i], self._genattrs.points_n_rot_[off_mfld_idx, dimZ][i]]),\
+                    "{:.2f}".format(self._genattrs.actual_distances[i].item()))
+        
+        
+        plt.legend()
+        plt.title("pre-image samples (rotated embedding)")
+        plt.show()
+        
+        plt.hist(np.linalg.norm(neg_pre_img_rot_\
+                               - self._genattrs.points_n_rot_[off_mfld_idx], ord=2, axis=1) - self._genattrs.actual_distances[off_mfld_idx].numpy().reshape(-1))
+        plt.ylabel("freq")
+        plt.xlabel("error value")
+        plt.title("error distribution for distance value from manifold (rotated)")
+        plt.show()
+        
+        min_dist_vals = list()
+        
+        for i in idx:
+            
+            neg_ex = self._genattrs.points_n[i]
+            min_dist = None
+            
+            for j in range(self._genattrs.num_neg):
+                
+                a_pre_img = neg_pre_img_rot_[j]
+                dist = np.linalg.norm(neg_ex - a_pre_img, ord=2)
+                
+                if min_dist is None or dist < min_dist:
+                    min_dist = dist
+                    
+            min_dist_vals.append(min_dist)
+            
+        errors = np.abs(self._genattrs.actual_distances[idx].numpy().reshape(-1) - np.array(min_dist_vals))
+        rel_errors = errors / self._genattrs.actual_distances[idx].numpy().reshape(-1)
+        print("absolute errors:", errors)
+        print("relative errors:", rel_errors)
+
+    def load_data(self, dump_dir):
+        """
+        `dump_dir` should contain two files - 
+        `specs.json` and `data.pkl`. What they contain
+        can be learned from `.save_data` method
+        """
+        specs_fn = os.path.join(dump_dir, "specs.json")
+        data_fn = os.path.join(dump_dir, "data.pkl")
+
+        with open(specs_fn) as f:
+            specs_attrs = json.load(f)
+
+        data_attrs = torch.load(data_fn)
+
+        attrs = {**specs_attrs, **data_attrs}
+
+        self._genattrs = GeneralManifoldAttrs(**attrs)
+        self._specattrs = SpecificSphereAttrs(**attrs)
+
+        for attr_set in [self._genattrs, self._specattrs]:
+            for attr in vars(attr_set):
+                if attr in attrs:
+                    setattr(self._genattrs, attr, attrs[attr])
+
 
     def save_data(self, save_dir):
-        return super().save_data(save_dir)
+        """
+        based on past mistakes:
+        1. keep specification variables (typically non-iterables)
+           separately
+        2. keep tensors in a dictionary and pickle the dictionary, not
+           the whole object; helps with versioning
+        """
+        os.makedirs(save_dir, exist_ok=True)
+        specs_fn = os.path.join(save_dir, "specs.json")
+        data_fn = os.path.join(save_dir, "data.pkl")
 
-    
+        specs_attrs = dict()
+        data_attrs = dict()
+
+        gen_attrs = vars(self._genattrs)
+        sphere_attrs = vars(self._specattrs)
+
+        for attr_set in [gen_attrs, sphere_attrs]:
+            for attr in attr_set:
+                if not isinstance(attr_set[attr], Iterable):
+                    specs_attrs[attr] = attr_set[attr]
+                else:
+                    data_attrs[attr] = attr_set[attr]
+
+        with open(specs_fn, "w+") as f:
+            json.dump(specs_attrs, f)
+
+        torch.save(data_attrs, data_fn)
+
+
 
 
 if __name__ == '__main__':
@@ -346,5 +626,8 @@ if __name__ == '__main__':
     }
 
     test = RandomSphere(**dummy_params)
+    test.save_data("./test")
+    b = RandomSphere()
+    b.load_data("./test")
 
 

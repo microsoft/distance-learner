@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import MutableMapping
 
 import numpy as np
 
@@ -56,9 +55,8 @@ class GeneralManifoldAttrs(object):
         :type numpy.array:
         """
 
-
         self._N = N
-        self._num_neg = np.floor(self._N / 2).astype(np.int64)
+        self._num_neg = np.floor(self._N / 2).astype(np.int64).item()
         if num_neg is not None:
             self._num_neg = num_neg
         self._n = n
@@ -104,7 +102,7 @@ class GeneralManifoldAttrs(object):
         self.distances = None
         """clamped distance of the point from the sphere's surface"""
 
-        self._fix_center = None
+        self.fix_center = None
         """point used for translation close to the origin during normalization"""
 
         self.normed_points_n = self.points_n
@@ -170,6 +168,7 @@ class GeneralManifoldAttrs(object):
     @property
     def translation(self):
         return self._translation
+
 
 
 class SpecificManifoldAttrs(ABC):
