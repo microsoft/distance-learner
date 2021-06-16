@@ -17,7 +17,6 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-
 import torchvision
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as TF
@@ -64,6 +63,42 @@ def seed_worker(worker_id):
 def weighted_mse_loss(inp, target, weight):
         return (weight.reshape(-1) * (inp - target) ** 2).mean()
 
+def masked_mse_loss_for_far_mfld(logits, targets):
+    """
+        mask loss caused by points that are far from the target mfld.
+        in ground truth. 
+
+        :param logits: logit tensor with dim (num_samples x num_classes)
+        :type logits: torch.Tensor(num_samples x num_classes)
+        :param targets: logit tensor with dim (num_samples x num_classes)
+        :type targets: torch.Tensor(num_samples x num_classes)
+    """
+
+    gt_far_classes = torch.max(targets, axis=1)[1]
+    mask = torch.zeros_like(targets, requires_grad=False)
+    mask[torch.arange(0, mask.shape[0]), gt_far_classes] = 1
+    # targets[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
+    # logits[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
+    # print(gt_far_classes, mask, mask.shape)
+    # loss = ((logits - targets)**2).mean()
+    loss = ((1 - mask) * ((logits - targets) ** 2)).sum() / (1 - mask).sum()
+    # print(targets, (1 - mask) * ((logits - targets) ** 2))
+    # print(loss)
+    return loss
+
+
+loss_funcs = {
+    "std_mse": nn.MSELoss(),
+    "weighted_mse": weighted_mse_loss,
+    "masked_mse": masked_mse_loss_for_far_mfld
+}
+
+model_type = {
+    "mlp-vanilla": MLP,
+    "mlp-norm": MLPwithNormalisation,
+    "mt-mlp-norm": MTMLPwithNormalisation
+}
+
 
 def custom_histogram_adder(writer, model, current_epoch):
        
@@ -76,7 +111,7 @@ def custom_histogram_adder(writer, model, current_epoch):
 def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,\
           feature_name="normed_points", target_name="normed_distances",\
           num_epochs=500, task="regression", name="MLP_512x4_in1000",\
-          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None):
+          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=True):
     """
         Function to train the model. Also dumps the best model.
         
@@ -149,8 +184,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             writer.add_histogram(phase + "/S1/distances", dataloaders[phase].dataset.all_distances[:, 0])
             writer.add_histogram(phase + "/S2/distances", dataloaders[phase].dataset.all_distances[:, 1])
 
+            writer.add_histogram(phase + "/S1/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 0])
+            writer.add_histogram(phase + "/S2/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 1])
+
             writer.add_histogram(phase + "/S1/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 0])
             writer.add_histogram(phase + "/S2/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 1])
+
+            writer.add_histogram(phase + "/S1/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 0])
+            writer.add_histogram(phase + "/S2/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 1])
 
         
         capture_attrs =  ["S1_config", "S2_config", "n", "seed"]
@@ -189,6 +230,13 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     last_best_epoch_loss = None
     
     losses = {"train_losses": [], "val_losses": []}
+
+    epoch_wise_logits = None
+    epoch_wise_targets = None
+
+    if debug:
+        epoch_wise_logits = torch.zeros(num_epochs, dataloaders["val"].dataset.normed_all_actual_distances.shape[0], dataloaders["val"].dataset.normed_all_actual_distances.shape[1])
+        epoch_wise_targets = torch.zeros(num_epochs, dataloaders["val"].dataset.normed_all_actual_distances.shape[0], dataloaders["val"].dataset.normed_all_actual_distances.shape[1])
     
     for epoch in tqdm(range(num_epochs)):
         
@@ -200,9 +248,12 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             "lr": start_lr
         }
         
+        
+
         for phase in ["train", "val"]:
             
             all_logits = None
+            all_targets = None
 
             dl = dataloaders[phase]
             
@@ -231,10 +282,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 def get_data(batch_dict, feature_name=feature_name, target_name=target_name):
                     return batch_dict[feature_name], batch_dict[target_name]
                 
-                points, distances = get_data(batch)
+                points, targets = None, None
+                if type(batch) == dict:
+                    points, targets = get_data(batch, feature_name=feature_name, target_name=target_name)
+                else:
+                    points, targets = batch[0], batch[1]
 
                 points = points.to(device)
-                distances = distances.to(device)
+                targets = targets.to(device)
                 # classes = batch[2].to(device)
                 
                 
@@ -257,7 +312,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
 
                 # loss = loss_func(logits, distances, weights)
 
-                loss = loss_func(logits, distances)
+                loss = loss_func(logits, targets)
                 
                 if phase == "train":
                     optimizer.zero_grad()
@@ -277,16 +332,20 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                     all_logits = torch.zeros(len(dataloaders[phase].dataset), logits.shape[1])
                 all_logits[i*points.shape[0]:(i+1)*points.shape[0]] = logits.detach().cpu()
 
+                if all_targets is None:
+                    all_targets = torch.zeros(len(dataloaders[phase].dataset), targets.shape[1])
+                all_targets[i*points.shape[0]:(i+1)*points.shape[0]] = targets.detach().cpu()
+
                 num_batches += 1
                 
                 points = points.cpu()
-                distances = distances.cpu()
+                targets = targets.cpu()
                 model = model.cpu()
                 logits = logits.cpu()
                 
                 if task == "clf":
                     pred_classes[i*points.shape[0]:(i+1)*points.shape[0]] = torch.max(logits, axis=1)[1]
-                    target_classes[i*points.shape[0]:(i+1)*points.shape[0]] = distances
+                    target_classes[i*points.shape[0]:(i+1)*points.shape[0]] = targets
             
             if task == "clf":
                 f1 = f1_score(target_classes, pred_classes)
@@ -298,7 +357,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 writer.add_scalar(phase + "/f1", logs[prefix + "f1"], epoch)
                 writer.add_scalar(phase + "/acc", logs[prefix + "acc"], epoch)
 
-                    
+            
             
             # dividing by the number of batches
             logs[prefix + "loss"] /= num_batches
@@ -306,7 +365,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             if phase == "train":
                 custom_histogram_adder(writer, model, epoch)
             
-            
+            if phase == "val" and debug:
+                epoch_wise_logits[epoch] = all_logits
+                epoch_wise_targets[epoch] = all_targets
+
 
             if all_logits.shape[1] == 1:
                 writer.add_histogram(phase + "/logits", all_logits.reshape(-1), epoch)
@@ -355,6 +417,11 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
         writer.flush()
 
     writer.close()
+
+    if debug:
+        torch.save(epoch_wise_logits, os.path.join(save_dir, "epoch_wise_val_logits.pt"))
+        torch.save(epoch_wise_targets, os.path.join(save_dir, "epoch_wise_val_targets.pt"))
+
     return model, optimizer, train_loss_matrix, val_loss_matrix
 
                     
@@ -370,6 +437,7 @@ def test(model, dataloader, device, task="regression",\
     all_targets = None
     # all_true_distances = None
     # all_classes = None
+
     
     with torch.no_grad():
         
@@ -377,8 +445,12 @@ def test(model, dataloader, device, task="regression",\
             # print(len(batch))
             def get_data(batch_dict, feature_name=feature_name, target_name=target_name):
                 return batch_dict[feature_name], batch_dict[target_name]
-        
-            points, targets = get_data(batch, feature_name=feature_name, target_name=target_name)
+            
+            points, targets = None, None
+            if type(batch) == dict:
+                points, targets = get_data(batch, feature_name=feature_name, target_name=target_name)
+            else:
+                points, targets = batch[0], batch[1]
 
             points = points.to(device)
             targets = targets.to(device)
@@ -494,6 +566,10 @@ if __name__ == '__main__':
     parser.add_argument("--init_wts", type=str, help="path to initial weights", default=None)
     parser.add_argument("--num_classes", type=int, help="number of manifolds", default=1)
     parser.add_argument("--input_size", type=int, help="input size", default=2)
+    
+    parser.add_argument("--model_type", type=str, help="model type to use for training")
+    parser.add_argument("--loss_func", type=str, help="loss function to use: 'std_mse', 'weighted_mse', and 'masked_mse'")
+
 
     parser.add_argument("--train_fn", type=str, help="path to train data") 
     parser.add_argument("--val_fn", type=str, help="path to val data") 
@@ -501,7 +577,7 @@ if __name__ == '__main__':
     parser.add_argument("--data_fn", type=str, help="path to any other data")
     parser.add_argument("--ftname", type=str, help="named attribute for features when fetching dataset", default="normed_points") 
     parser.add_argument("--tgtname", type=str, help="named attribute for labels when fetching dataset", default="normed_distances") 
-    
+
     args = parser.parse_args()
 
 
@@ -530,6 +606,8 @@ if __name__ == '__main__':
     FTNAME = args.ftname
     TGTNAME = args.tgtname
 
+    MODEL_TYPE = args.model_type
+    loss_func = args.loss_func
 
     specs_dict = {
         "batch_size": args.batch_size,
@@ -548,7 +626,9 @@ if __name__ == '__main__':
         "val_fn": args.val_fn,
         "test_fn": args.test_fn,
         "ftname": args.ftname,
-        "tgtname": args.tgtname
+        "tgtname": args.tgtname,
+        "model_type": args.model_type,
+        "loss_func": args.loss_func
     }
 
     # if specs file is provided, override all past values
@@ -557,7 +637,7 @@ if __name__ == '__main__':
         specs_dict = json.load(open(args.specs))
         BATCH_SIZE, CUDA, TASK, NUM_EPOCHS, SAVE_DIR, NAME,\
             WARMUP, COOLDOWN, LR, INIT_WTS, NUM_CLASSES, INPUT_SIZE,\
-            TRAIN_FN,VAL_FN, TEST_FN, FTNAME, TGTNAME = load_specs(specs_dict)
+            TRAIN_FN,VAL_FN, TEST_FN, FTNAME, TGTNAME, MODEL_TYPE, loss_func = load_specs(specs_dict)
 
 
     if TRAIN_FLAG:
@@ -606,19 +686,20 @@ if __name__ == '__main__':
 
         dataloaders = {
             "train": DataLoader(dataset=train_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker),
-            "val": DataLoader(dataset=val_set, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
+            "val": DataLoader(dataset=val_set, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
         }  
 
         device = torch.device("cuda:{}".format(CUDA) if torch.cuda.is_available() and CUDA else "cpu")
 
-        model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+        model = model_type[MODEL_TYPE](input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+        # model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
         # model = MLP(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, use_tanh=False)
         # model = ResNet18(num_classes=args.num_classes)
         if INIT_WTS is not None:
             model.load_state_dict(torch.load(INIT_WTS))
         
         
-        loss_func = nn.MSELoss()
+        loss_func = loss_funcs[loss_func]
         # loss_func = weighted_mse_loss
         if TASK == "clf":
             loss_func = nn.CrossEntropyLoss()
@@ -640,6 +721,8 @@ if __name__ == '__main__':
                          name=NAME, scheduler=scheduler, scheduler_params=scheduler_params, specs_dict=specs_dict)
 
     elif TEST_FLAG:
+
+        
         
         phases = ["train", "val", "test"]
         data_fns = [TRAIN_FN, VAL_FN, TEST_FN]
@@ -652,14 +735,25 @@ if __name__ == '__main__':
             dataset = torch.load(splits[split]["fn"])
             NUM_WORKERS = 8
 
-            dataloader = DataLoader(dataset=dataset, shuffle=True, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
+            if TASK == "clf":
+                OFF_MFLD_LABEL = 2
+
+                dataset.all_points = dataset.all_points[dataset.class_labels != OFF_MFLD_LABEL]
+                dataset.all_distances = dataset.all_distances[dataset.class_labels != OFF_MFLD_LABEL]
+                dataset.normed_all_points = dataset.normed_all_points[dataset.class_labels != OFF_MFLD_LABEL]
+                dataset.normed_all_distances = dataset.normed_all_distances[dataset.class_labels != OFF_MFLD_LABEL]
+                dataset.class_labels = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
+
+            # shuffle not needed here. makes things easier if post-processing is needed
+            dataloader = DataLoader(dataset=dataset, shuffle=False, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, worker_init_fn=seed_worker)
 
             device = torch.device("cuda:{}".format(CUDA) if torch.cuda.is_available() and CUDA else "cpu")
 
-            model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+            model = model_type[MODEL_TYPE](input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
+            # model = MLPwithNormalisation(input_size=INPUT_SIZE, output_size=NUM_CLASSES, hidden_sizes=[512] * 4, weight_norm=False, use_tanh=False, use_relu=False)
 
             if INIT_WTS is None:
-                raise Exception("INIT_WTS needed for testing!")
+                raise RuntimeError("INIT_WTS needed for testing!")
             
             model.load_state_dict(torch.load(INIT_WTS)["model_state_dict"])
 

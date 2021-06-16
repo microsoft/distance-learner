@@ -223,7 +223,7 @@ class RandomSphere(Dataset):
     def gen_points(self):
         """
         
-            generating points in k-dim and embedding in n-dim
+            generating points in k-dim
 
             reference: https://en.wikipedia.org/wiki/N-sphere#Uniformly_at_random_on_the_(n_%E2%88%92_1)-sphere
             
@@ -279,8 +279,8 @@ class RandomSphere(Dataset):
         # we can imaging the same vector at $p$, and later adjust the coordinates
         # by adding the position vector of $p$ back.
         #
-        # Also note that these negative examples are being generated using first
-        # half of self.points_k
+        # Also note that these negative examples are being generated using the pre-images
+        # that we generated and stored in self.pre_images_k
         
         normal_vectors_to_mfld_at_p = self.pre_images_k - self.x_ck
         embedded_normal_vectors_to_mfld_at_p = np.zeros((self.num_neg, self.n))
@@ -717,15 +717,19 @@ class TwoRandomSpheres(Dataset):
         self.all_actual_distances[self.S1.N:, 1] = self.shifted_S2.actual_distances.reshape(-1)
         self.all_actual_distances[self.S1.N:, 0] = -1
 
+        # specially for the case where n=2; k=2
+        if self.n == 2 and self.S1.k == 2 and self.S2.k == 2:
+            self.all_actual_distances[:self.S1.N, 1] = np.abs(np.linalg.norm(self.all_points[:self.S1.N] - self.shifted_S2.x_cn, ord=2, axis=1) - self.shifted_S2.r)
+            self.all_actual_distances[self.S1.N:, 0] = np.abs(np.linalg.norm(self.all_points[self.S1.N:] - self.S1.x_cn, ord=2, axis=1) - self.S1.r)
+
+
         # giving class labels
-        # 0: no manifold
-        # 1: S_1
-        # 2: S_2
+        # 2: no manifold; 0: S_1; 1: S_2
         self.class_labels = np.zeros(self.S1.N + self.shifted_S2.N, dtype=np.int64)
-        self.class_labels[:self.S1.num_neg] = 0
-        self.class_labels[self.S1.num_neg:self.S1.N] = 1
-        self.class_labels[self.S1.N:self.S1.N + self.S2.num_neg] = 0
-        self.class_labels[self.S1.N + self.S2.num_neg:] = 2
+        self.class_labels[:self.S1.num_neg] = 2
+        self.class_labels[self.S1.num_neg:self.S1.N] = 0
+        self.class_labels[self.S1.N:self.S1.N + self.S2.num_neg] = 2
+        self.class_labels[self.S1.N + self.S2.num_neg:] = 1
 
         # shuffling the inputs and targets
         # self.perm = np.random.permutation(self.all_points.shape[0])
@@ -759,8 +763,10 @@ class TwoRandomSpheres(Dataset):
         return {
             "points": self.all_points[idx],
             "distances": self.all_distances[idx],
+            "actual_distances": self.all_actual_distances[idx],
             "normed_points": self.normed_all_points[idx],
             "normed_distances": self.normed_all_distances[idx],
+            "normed_actual_distances": self.normed_all_actual_distances[idx],
             "classes": self.class_labels[idx]
         }
 
@@ -775,7 +781,7 @@ class TwoRandomSpheres(Dataset):
             self.norm_factor = self.gamma * (self.c_dist + self.S1.r + self.S2.r + self.S1.max_norm + self.S2.max_norm)
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
-        self.normed_all_actual_distances = self.all_distances / self.norm_factor
+        self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
     
         # change the coordinates of the central point
         self.S1.normed_x_cn = self.S1.x_cn / self.norm_factor
@@ -1019,56 +1025,6 @@ if __name__ == '__main__':
         torch.save(config, f)
     
             
-
-
-
-
-
-
-
-    # dummy_params = {
-    #     "N": 100000,
-    #     "num_neg": None,
-    #     "n": 3,
-    #     "k": 2,
-    #     "r": 100.0,
-    #     "D": 25.0,
-    #     "max_norm": 500.0,
-    #     "mu": 1000,
-    #     "sigma": 5000,
-    #     "seed": 85
-    # }
-
-    # dummy_set = RandomSphere(**dummy_params)
-    # dummy_set.viz_test()
-
-    # dummy_params_1 = {
-    #     "N": 100000,
-    #     "num_neg": None,
-    #     "n": 3,
-    #     "k": 2,
-    #     "r": 100.0,
-    #     "D": 25.0,
-    #     "max_norm": 2.0,
-    #     "mu": 1000,
-    #     "sigma": 5000,
-    #     "seed": 85
-    # }
-
-    # dummy_params_2 = {
-    #     "N": 100000,
-    #     "num_neg": None,
-    #     "n": 3,
-    #     "k": 2,
-    #     "r": 100.0,
-    #     "D": 25.0,
-    #     "max_norm": 2.0,
-    #     "mu": 1000,
-    #     "sigma": 5000,
-    #     "seed": 91
-    # }
-
-    # dummy_set = TwoRandomSpheres(dummy_params_1, dummy_params_2)
 
      
 

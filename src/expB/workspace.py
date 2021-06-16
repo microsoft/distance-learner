@@ -25,6 +25,9 @@ def load_specs(specs_dict):
     FTNAME = specs_dict["ftname"]
     TGTNAME = specs_dict["tgtname"]
 
+    MODEL_TYPE = specs_dict["model_type"]
+    loss_func = specs_dict["loss_func"]
+
     return BATCH_SIZE, CUDA, TASK, NUM_EPOCHS, SAVE_DIR,\
         NAME, WARMUP, COOLDOWN, LR, INIT_WTS, NUM_CLASSES, INPUT_SIZE, TRAIN_FN,\
-            VAL_FN, TEST_FN, FTNAME, TGTNAME
+            VAL_FN, TEST_FN, FTNAME, TGTNAME, MODEL_TYPE, loss_func

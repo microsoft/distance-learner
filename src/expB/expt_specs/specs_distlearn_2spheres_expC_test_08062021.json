@@ -1,0 +1,21 @@
+{
+    "batch_size": 512,
+    "cuda": 0,
+    "task": "regression",
+    "num_epochs": 500,
+    "save_dir": "/azuredrive/dumps/expC_dist_learner_for_adv_ex/k2n2/actual_dist_learner_w_masked_mse/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm}_data{2spheres_in_unit_cube;n=2;k=2;actual_distance}/10062021-140010/",
+    "name": "eval",
+    "warmup": null,
+    "cooldown": null,
+    "lr": null,
+    "init_wts": "/azuredrive/dumps/expC_dist_learner_for_adv_ex/k2n2/actual_dist_learner_w_masked_mse/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm}_data{2spheres_in_unit_cube;n=2;k=2;actual_distance}/10062021-140010/models/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm}_data{2spheres_in_unit_cube;n=2;k=2;actual_distance}_10062021-140010_val_loss_5.50927297560122e-08_epoch_497.pth",
+    "num_classes": 2,
+    "input_size": 2,
+    "train_fn": "/azuredrive/datasets/expC/2spheres_k2n2/train_set.pt",
+    "val_fn": "/azuredrive/datasets/expC/2spheres_k2n2/val_set.pt",
+    "test_fn": "/azuredrive/datasets/expC/2spheres_k2n2/test_set.pt",
+    "data_fn": null,
+    "ftname": "normed_points",
+    "tgtname": "normed_actual_distances",
+    "loss_func": "masked_mse"
+}

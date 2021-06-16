@@ -156,6 +156,110 @@ class MLPwithNormalisation(nn.Module):
         logits = self.layers(X)
         return logits
 
+class MTMLPwithNormalisation(nn.Module):
+    
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], num_tasks=2, weight_norm=True, use_tanh=True, use_relu=True):
+        
+        super(MTMLPwithNormalisation, self).__init__()
+        
+        self.input_size = input_size
+        self.output_size = output_size
+        self.hidden_sizes = hidden_sizes
+        self.num_tasks = num_tasks
+        self.weight_norm = weight_norm
+        self.use_tanh = use_tanh
+        self.use_relu = use_relu
+
+        layers = None
+
+        if not self.weight_norm:
+
+            layers = [("fcn-0", nn.Linear(self.input_size, hidden_sizes[0])), ("bn-0", nn.LayerNorm(hidden_sizes[0])), ("relu-0", nn.ReLU())]
+        
+        else:
+
+            layers =  [("fcn-0", nn.utils.weight_norm(nn.Linear(self.input_size, hidden_sizes[0]))), ("relu-0", nn.ReLU())]
+
+
+        for i in range(len(self.hidden_sizes) - 3):
+
+            if not self.weight_norm:
+                layers.append(
+                    ("fcn-{n}".format(n=i+1), nn.Linear(hidden_sizes[i], hidden_sizes[i+1]))
+                )
+
+                layers.append(
+                    ("bn-{n}".format(n=i+1), nn.LayerNorm(hidden_sizes[i+1]))
+                )
+
+            else:
+                layers.append(
+                    ("fcn-{n}".format(n=i+1), nn.utils.weight_norm(nn.Linear(hidden_sizes[i], hidden_sizes[i+1])))
+                )
+
+            layers.append(
+                    ("relu-{n}".format(n=i+1), nn.ReLU())
+            )
+
+        self.shared_layers = nn.Sequential(OrderedDict(layers))
+        
+        self.task_layers = {}
+
+        for i in range(num_tasks):
+            
+            layers = list()
+
+            for j in range(len(self.hidden_sizes) - 3, len(self.hidden_sizes) - 1):
+
+                if not self.weight_norm:
+                    
+                    layers.append(
+                        ("fcn-{t}-{n}".format(t=i+1, n=j+1), nn.Linear(hidden_sizes[j], hidden_sizes[j+1]))
+                    )
+
+                    layers.append(
+                        ("bn-{t}-{n}".format(t=i+1, n=j+1), nn.LayerNorm(hidden_sizes[j+1]))
+                    )
+
+                else:
+                    layers.append(
+                        ("fcn-{t}-{n}".format(t=i+1, n=j+1), nn.utils.weight_norm(nn.Linear(hidden_sizes[j], hidden_sizes[j+1])))
+                    )
+
+                layers.append(
+                        ("relu-{t}-{n}".format(t=i+1, n=j+1), nn.ReLU())
+                )
+
+            # for last layer of the task
+            layers.append(("fcn-" + str(self.num_tasks) + "-" + str(len(hidden_sizes)), nn.Linear(hidden_sizes[-1], output_size // self.num_tasks)))
+        
+            if not self.use_tanh:
+                if self.use_relu:
+                    # my own addition
+                    layers.append(("relu-" + str(self.num_tasks) + "-" + str(len(hidden_sizes)), nn.ReLU()))
+                else:
+                    layers.append(("sigmoid-" + str(self.num_tasks) + "-" + str(len(hidden_sizes)), nn.Sigmoid()))
+            else:
+                layers.append(("tanh-" + str(self.num_tasks) + "-" + str(len(hidden_sizes)), nn.Tanh()))
+
+            self.task_layers["task-" + str(i+1)] = nn.Sequential(OrderedDict(layers))
+        self.task_layers = nn.ModuleDict(self.task_layers)
+        
+    def forward(self, X):
+        shared_logits = self.shared_layers(X)
+        logits = torch.zeros((X.shape[0], self.output_size))
+
+        start_idx = 0
+
+        for i in range(self.num_tasks):
+            logits[:, i*(self.output_size // self.num_tasks):(i+1)*(self.output_size // self.num_tasks)] = self.task_layers["task-" + str(i+1)](shared_logits)
+
+        return logits
+
+
+
+
+
 class ConvNet1(nn.Module):
     """CNN-based architecture"""
     
