@@ -85,6 +85,9 @@ class GeneralManifoldAttrs(object):
 
         self.points_k = None
         """points sampled from the sphere in k-dim"""
+
+        self.pre_images_k = None
+        """k-dimensional on-manifold pre-images of the off-manifold points"""
         
         self.points_n_trivial_ = None
         """sampled points in higher dimension after trivial embedding"""
@@ -258,6 +261,13 @@ class SpecificManifoldAttrs(ABC):
 
 
 class Manifold(ABC):
+    """
+    Abstract class for a manifold
+
+    Contains methods that any class representing a manifold should 
+    contain
+    """
+
 
     def __init__(self, genattrs=None, specattrs=None, **kwargs):
         """should be re-implemented!"""
@@ -367,7 +377,7 @@ class Manifold(ABC):
         neg_examples = (neg_norms.reshape(-1, 1) / np.linalg.norm(neg_examples, axis=1, ord=2).reshape(-1, 1)) * neg_examples
 
         # add position vector of $p$ to get origin centered coordinates
-        neg_examples[:, :self._genattrs.k] = neg_examples[:, :self._genattrs.k] + self._specattrs.pre_images_k
+        neg_examples[:, :self._genattrs.k] = neg_examples[:, :self._genattrs.k] + self._genattrs.pre_images_k
 
         # distances from the manifold will be the norms the samples were rescaled by
         neg_distances = neg_norms
@@ -426,7 +436,7 @@ class Manifold(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def load_data(self):
+    def load_data(self, dump_dir):
         """
         load data from the dump
 

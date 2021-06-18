@@ -124,6 +124,10 @@ class RandomSphere(Manifold, Dataset):
                  sigma=self._genattrs.sigma, seed=self._genattrs.seed,\
                  n=self._genattrs.n, x_ck=x_ck)
 
+        ## setting seed
+        torch.manual_seed(self._genattrs.seed)
+        np.random.seed(self._genattrs.seed)
+
         self.compute_points()
 
     @property
@@ -218,7 +222,7 @@ class RandomSphere(Manifold, Dataset):
 
         points_k = points_k + self._specattrs.x_ck
         
-        self._specattrs.pre_images_k = points_k
+        self._genattrs.pre_images_k = points_k
 
     def compute_normals(self):
         
@@ -227,8 +231,8 @@ class RandomSphere(Manifold, Dataset):
         # by adding the position vector of $p$ back.
         #
         # Also note that these negative examples are being generated using the pre-images
-        # that we generated and stored in self._specattrs.pre_images_k
-        normal_vectors_to_mfld_at_p = self._specattrs.pre_images_k - self._specattrs.x_ck
+        # that we generated and stored in self._genattrs.pre_images_k
+        normal_vectors_to_mfld_at_p = self._genattrs.pre_images_k - self._specattrs.x_ck
         embedded_normal_vectors_to_mfld_at_p = np.zeros((self._genattrs.num_neg, self._genattrs.n))
         embedded_normal_vectors_to_mfld_at_p[:, :self._genattrs.k] = normal_vectors_to_mfld_at_p
 
@@ -571,7 +575,7 @@ class RandomSphere(Manifold, Dataset):
         for attr_set in [self._genattrs, self._specattrs]:
             for attr in vars(attr_set):
                 if attr in attrs:
-                    setattr(self._genattrs, attr, attrs[attr])
+                    setattr(attr_set, attr, attrs[attr])
 
 
     def save_data(self, save_dir):
@@ -580,7 +584,7 @@ class RandomSphere(Manifold, Dataset):
         1. keep specification variables (typically non-iterables)
            separately
         2. keep tensors in a dictionary and pickle the dictionary, not
-           the whole object; helps with versioning
+           the whole object; helps with serialization errors
         """
         os.makedirs(save_dir, exist_ok=True)
         specs_fn = os.path.join(save_dir, "specs.json")
