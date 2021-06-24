@@ -1,5 +1,6 @@
 import os
 import sys
+sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 import json
 import time
 import copy
@@ -40,10 +41,12 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-from spheres_v2 import RandomSphere, TwoRandomSpheres
-from ptcifar.models import ResNet18
-from myNNs import *
-from workspace import *
+
+from expB.spheres_v2 import RandomSphere, TwoRandomSpheres
+from expB.ptcifar.models import ResNet18
+from expB.myNNs import *
+from expB.workspace import *
+
 
 
 
@@ -73,24 +76,29 @@ def masked_mse_loss_for_far_mfld(logits, targets):
         :param targets: logit tensor with dim (num_samples x num_classes)
         :type targets: torch.Tensor(num_samples x num_classes)
     """
+    if np.inf not in targets:
+        gt_far_classes = torch.max(targets, axis=1)[1]
+        mask = torch.zeros_like(targets, requires_grad=False)
+        mask[torch.arange(0, mask.shape[0]), gt_far_classes] = 1
+        # targets[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
+        # logits[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
+        # print(targets, gt_far_classes, mask, mask.shape)
+        # loss = ((logits - targets)**2).mean()
+        loss = ((1 - mask) * ((logits - targets) ** 2)).sum() / (1 - mask).sum()
+        # print(targets, (1 - mask) * ((logits - targets) ** 2))
+        # print(loss)
 
-    gt_far_classes = torch.max(targets, axis=1)[1]
-    mask = torch.zeros_like(targets, requires_grad=False)
-    mask[torch.arange(0, mask.shape[0]), gt_far_classes] = 1
-    # targets[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
-    # logits[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
-    # print(gt_far_classes, mask, mask.shape)
-    # loss = ((logits - targets)**2).mean()
-    loss = ((1 - mask) * ((logits - targets) ** 2)).sum() / (1 - mask).sum()
-    # print(targets, (1 - mask) * ((logits - targets) ** 2))
-    # print(loss)
+    else:
+        unmask = targets != np.inf
+        loss = ((logits[unmask] - targets[unmask]) ** 2).sum() / unmask.sum()
     return loss
 
 
 loss_funcs = {
     "std_mse": nn.MSELoss(),
     "weighted_mse": weighted_mse_loss,
-    "masked_mse": masked_mse_loss_for_far_mfld
+    "masked_mse": masked_mse_loss_for_far_mfld,
+    "cross_entropy": nn.CrossEntropyLoss()
 }
 
 model_type = {
@@ -107,11 +115,13 @@ def custom_histogram_adder(writer, model, current_epoch):
           
             writer.add_histogram(name,params,current_epoch)
 
+def init():
+    print("import successful")
 
 def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,\
           feature_name="normed_points", target_name="normed_distances",\
           num_epochs=500, task="regression", name="MLP_512x4_in1000",\
-          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=True):
+          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=False):
     """
         Function to train the model. Also dumps the best model.
         
@@ -123,7 +133,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     start_lr = optimizer.param_groups[0]['lr']
     
     TIME_STAMP = time.strftime("%d%m%Y-%H%M%S")
-
+    print("test:",type(num_epochs), type(len(dataloaders["train"])))
     train_loss_matrix = torch.zeros((num_epochs, len(dataloaders["train"])))
     val_loss_matrix = torch.zeros((num_epochs, len(dataloaders["val"])))
     
@@ -158,25 +168,25 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             plt.close(fig_plot)
         return fig_plot
 
-    if hasattr(dataloaders["train"].dataset, "distances"):
-        writer.add_histogram("train/distances", dataloaders["train"].dataset.distances)
-        writer.add_histogram("val/distances", dataloaders["val"].dataset.distances)
+    if hasattr(dataloaders["train"].dataset.genattrs, "distances"):
+        writer.add_histogram("train/distances", dataloaders["train"].dataset.genattrs.distances)
+        writer.add_histogram("val/distances", dataloaders["val"].dataset.genattrs.distances)
 
         # plt.figure(figsize = (10,7))
         # fig_train = plt.scatter(dataloaders["train"].dataset.points_n[:, 0], dataloaders["train"].dataset.points_n[:, 1], s=0.01).get_figure()
         # plt.close(fig_train)
-        fig_train = plotDataIn3D(dataloaders["train"].dataset.points_n)
+        fig_train = plotDataIn3D(dataloaders["train"].dataset.genattrs.points_n)
         writer.add_figure("train/points_n", fig_train)
-        writer.add_text("train/data/params", str(vars(dataloaders["train"].dataset)))
+        writer.add_text("train/data/params", str(vars(dataloaders["train"].dataset.genattrs)))
 
         # plt.figure(figsize = (10,7))
         # fig_val = plt.scatter(dataloaders["val"].dataset.points_n[:, 0], dataloaders["val"].dataset.points_n[:, 1], s=0.01).get_figure()
         # plt.close(fig_val)
-        fig_val = plotDataIn3D(dataloaders["val"].dataset.points_n)
+        fig_val = plotDataIn3D(dataloaders["val"].dataset.genattrs.points_n)
         writer.add_figure("val/points_n", fig_val)
-        writer.add_text("train/val/params", str(vars(dataloaders["val"].dataset)))
+        writer.add_text("train/val/params", str(vars(dataloaders["val"].dataset.genattrs)))
 
-        writer.add_graph(model, dataloaders["train"].dataset.points_n[:dataloaders["train"].batch_size])
+        writer.add_graph(model, dataloaders["train"].dataset.genattrs.points_n[:dataloaders["train"].batch_size])
 
     elif hasattr(dataloaders["train"].dataset, "all_distances"):
         
@@ -261,8 +271,9 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             target_classes = None
             
             if task == "clf":
-                pred_classes = torch.zeros(dl.dataset.N)
-                target_classes = torch.zeros(dl.dataset.N)
+                N = dl.dataset.N if hasattr(dl.dataset, "N") else dl.dataset.genattrs.N
+                pred_classes = torch.zeros(N)
+                target_classes = torch.zeros(N)
             
             if phase == "train":
                 torch.set_grad_enabled(True)
@@ -333,7 +344,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 all_logits[i*points.shape[0]:(i+1)*points.shape[0]] = logits.detach().cpu()
 
                 if all_targets is None:
-                    all_targets = torch.zeros(len(dataloaders[phase].dataset), targets.shape[1])
+                    if len(targets.shape) == 1:
+                        all_targets = torch.zeros(len(dataloaders[phase].dataset))
+                    else:
+                        all_targets = torch.zeros(len(dataloaders[phase].dataset), targets.shape[1])
                 all_targets[i*points.shape[0]:(i+1)*points.shape[0]] = targets.detach().cpu()
 
                 num_batches += 1
@@ -400,8 +414,11 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 dump["val_acc"] = logs["val_acc"]
                 dump["f1"] = logs["f1"]
                 dump["val_f1"] = logs["val_f1"]
-                
-            torch.save(dump, os.path.join(model_dir, name + "_"+ TIME_STAMP + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
+
+            if debug:   
+                torch.save(dump, os.path.join(model_dir, name + "_"+ TIME_STAMP + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
+            else:
+                torch.save(dump, os.path.join(model_dir, "ckpt" + ".pth"))
 
         
         logs["lr"] = optimizer.param_groups[0]["lr"]
@@ -503,10 +520,15 @@ def test(model, dataloader, device, task="regression",\
         with open(specs_fn, "w+") as f:
             json.dump(specs_dict, f)
 
+    
     # print(targets_fn)
     if task == "regression":
-        mse = mean_squared_error(all_targets, all_logits)
-        mse_on_mfld = mean_squared_error(all_targets[np.round(all_targets) == 0], all_logits[np.round(all_targets) == 0])
+        masked_targets = all_targets.clone().detach()
+        masked_targets[all_targets == np.inf] = 0
+        masked_logits = all_logits.clone().detach()
+        masked_logits[all_targets == np.inf] = 0
+        mse = mean_squared_error(masked_targets, masked_logits)
+        mse_on_mfld = mean_squared_error(masked_targets[np.round(all_targets) == 0], masked_logits[np.round(all_targets) == 0])
 
         if save_dir is not None:
             torch.save(all_targets, targets_fn)

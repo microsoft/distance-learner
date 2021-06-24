@@ -1,5 +1,6 @@
 import os
 import sys
+sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 import time
 import copy
 
@@ -36,12 +37,12 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-from ptcifar.models import ResNet18
+from expB.ptcifar.models import ResNet18
 
 
 class MLP(nn.Module):
 
-    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], use_tanh=True, use_relu=True):
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], use_tanh=True, use_relu=True, **kwargs):
         
         super(MLP, self).__init__()
         
@@ -86,7 +87,7 @@ class MLP(nn.Module):
 
 class MLPwithNormalisation(nn.Module):
     
-    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], weight_norm=True, use_tanh=True, use_relu=True):
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], weight_norm=True, use_tanh=True, use_relu=True, **kwargs):
         
         super(MLPwithNormalisation, self).__init__()
         
@@ -158,7 +159,7 @@ class MLPwithNormalisation(nn.Module):
 
 class MTMLPwithNormalisation(nn.Module):
     
-    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], num_tasks=2, weight_norm=True, use_tanh=True, use_relu=True):
+    def __init__(self, input_size, output_size, hidden_sizes=[512, 512, 512, 512], num_tasks=2, weight_norm=True, use_tanh=True, use_relu=True, **kwargs):
         
         super(MTMLPwithNormalisation, self).__init__()
         
@@ -264,7 +265,7 @@ class ConvNet1(nn.Module):
     """CNN-based architecture"""
     
     
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, **kwargs):
         
         super(ConvNet1, self).__init__()
         self.input_size = input_size
@@ -305,7 +306,7 @@ class ConvNet2(nn.Module):
     """CNN-based architecture"""
     
     
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, **kwargs):
         
         super(ConvNet2, self).__init__()
         self.input_size = input_size
@@ -362,7 +363,7 @@ class ConvNet3(nn.Module):
     """CNN-based architecture"""
     
     
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, **kwargs):
         
         super(ConvNet3, self).__init__()
         self.input_size = input_size
@@ -419,7 +420,7 @@ class MTLModelForDistanceAndClass(nn.Module):
 
     
 
-    def __init__(self, input_size, output_size):
+    def __init__(self, input_size, output_size, **kwargs):
         """
             :param input_size: dims of input 
             :type input_size: int

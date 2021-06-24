@@ -1,5 +1,6 @@
 import os
 import sys
+sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 import time
 import copy
 import json
@@ -38,7 +39,7 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-from ptcifar.models import ResNet18
+
 
 
 
@@ -713,15 +714,14 @@ class TwoRandomSpheres(Dataset):
         # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
         self.all_actual_distances = np.zeros((self.S1.N + self.shifted_S2.N, 2))
         self.all_actual_distances[:self.S1.N, 0] = self.S1.actual_distances.reshape(-1)
-        self.all_actual_distances[:self.S1.N, 1] = -1
+        self.all_actual_distances[:self.S1.N, 1] = np.inf
         self.all_actual_distances[self.S1.N:, 1] = self.shifted_S2.actual_distances.reshape(-1)
-        self.all_actual_distances[self.S1.N:, 0] = -1
+        self.all_actual_distances[self.S1.N:, 0] = np.inf
 
         # specially for the case where n=2; k=2
         if self.n == 2 and self.S1.k == 2 and self.S2.k == 2:
             self.all_actual_distances[:self.S1.N, 1] = np.abs(np.linalg.norm(self.all_points[:self.S1.N] - self.shifted_S2.x_cn, ord=2, axis=1) - self.shifted_S2.r)
             self.all_actual_distances[self.S1.N:, 0] = np.abs(np.linalg.norm(self.all_points[self.S1.N:] - self.S1.x_cn, ord=2, axis=1) - self.S1.r)
-
 
         # giving class labels
         # 2: no manifold; 0: S_1; 1: S_2
