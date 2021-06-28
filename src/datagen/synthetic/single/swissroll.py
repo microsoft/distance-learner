@@ -18,8 +18,8 @@ from .manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
 
 identity = 'lambda x: x'
 d_identity = 'lambda x: 1'
-contract = 'lambda x, k=np.pi: x - k'
-d_contract = 'lambda x: 1'
+shrink = 'lambda x, k=np.pi: x - k'
+d_shrink = 'lambda x: 1'
 
 # def identity(x):
 #     """id. functional transform for swissroll"""
@@ -43,9 +43,9 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
          height=21, **kwargs):
         """
         :param g: "amplitude" function for swiss roll
-        :type g: function
+        :type g: str
         :param d_g: derivative of the "amplitude" function
-        :type d_g: function
+        :type d_g: str
         :param t_min: start of time interval for sampling
         :type t_min: float
         :param t_max: end of time interval for sampling
@@ -74,8 +74,10 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
         self._noise = noise
         """noise to be added"""
 
-        self._g = g
-        self._d_g = d_g
+        self._g = eval(g)
+        self._d_g = eval(d_g)
+        self._g_text = g
+        self._d_g_text = d_g
         self._omega = omega
         """angular velocity along the swiss roll"""
         self._num_turns = num_turns
@@ -105,7 +107,7 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
         """helper function for managing input parameters"""
 
         if (self._t_max is not None) and (self._omega is not None) and (self._num_turns is not None):
-            print(self._t_min, self._t_max, self._omega, self._num_turns)
+            # print(self._t_min, self._t_max, self._omega, self._num_turns)
             assert self._num_turns == ((self._t_max - self._t_min) * self._omega) / (2 * np.pi), "`num_turns`, `t_max`, and `omega` are incompatible!"
             
         elif self._t_max is None:
@@ -178,6 +180,22 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
     @d_g.setter
     def d_g(self, n):
         raise RuntimeError("cannot set `d_g` after instantiation!")
+
+    @property
+    def g_text(self):
+        return self._g_text
+
+    @g_text.setter
+    def g_text(self, n):
+        raise RuntimeError("cannot set `g_text` after instantiation!")
+
+    @property
+    def d_g_text(self):
+        return self._d_g_text
+
+    @d_g_text.setter
+    def d_g_text(self, n):
+        raise RuntimeError("cannot set `d_g_text` after instantiation!")
 
     @property
     def omega(self):
@@ -279,9 +297,6 @@ class RandomSwissRoll(Manifold, Dataset):
 
         self._genattrs = genattrs
         self._specattrs = specattrs
-
-        g = eval(g)
-        d_g = eval(d_g)
 
         if not isinstance(genattrs, GeneralManifoldAttrs):
             self._genattrs = GeneralManifoldAttrs(N=N, num_neg=num_neg,\
@@ -802,7 +817,7 @@ class RandomSwissRoll(Manifold, Dataset):
             for attr in vars(attr_set):
                 if attr in attrs:
                     if attr == "_g" or attr == "_d_g":
-                        attrs[attr] = eval(attrs[attr])
+                        attrs[attr] = eval(attrs[attr + "_text"])
                     setattr(attr_set, attr, attrs[attr])
 
                     
@@ -822,9 +837,11 @@ class RandomSwissRoll(Manifold, Dataset):
             for attr in attr_set:
         
                 if not isinstance(attr_set[attr], Iterable):
-                    specs_attrs[attr] = attr_set[attr]
                     if attr == "_g" or attr == "_d_g":
-                        specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
+                        continue
+                    specs_attrs[attr] = attr_set[attr]
+                    
+                        # specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
                 else:
                     data_attrs[attr] = attr_set[attr]
 

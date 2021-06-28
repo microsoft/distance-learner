@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import copy
 import time
 import random
 import inspect
@@ -90,8 +91,12 @@ class IntertwinedSwissRolls(Dataset):
 
         self.g = eval(g)
         self.d_g = eval(d_g)
+        self.g_text = g
+        self.d_g_text = d_g
         self.g_contract = lambda x: self.g(x) - contract
         self.dg_contract = lambda x: self.d_g(x)
+        self.g_contract_text = g + " - " + str(contract)
+        self.dg_contract_text = d_g + " - " + str(0)
 
         self.S1 = None
         self.S2 = None
@@ -260,6 +265,22 @@ class IntertwinedSwissRolls(Dataset):
     def height(self, n):
         raise RuntimeError("cannot set `height` after instantiation!")
     
+    @property
+    def rotation(self):
+        return self._rotation
+
+    @rotation.setter
+    def rotation(self, x):
+        raise RuntimeError("cannot set `rotation` after instantiation!")
+
+    @property
+    def translation(self):
+        return self._translation
+
+    @translation.setter
+    def traslation(self, x):
+        raise RuntimeError("cannot set `translation` after instantiation!")
+
 
     def compute_points(self):
 
@@ -270,7 +291,7 @@ class IntertwinedSwissRolls(Dataset):
             k=self._k, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, t_min=self._t_min, t_max=self._t_max, omega=self._omega,\
             num_turns=self._num_turns, noise=self._noise, correct=self._correct,\
-            scale=self._scale, g=self.g, d_g=self.d_g, height=self._height, rotation=self._rotation,\
+            scale=self._scale, g=self.g_text, d_g=self.d_g_text, height=self._height, rotation=self._rotation,\
             translation=self._translation, normalize=self._normalize, norm_factor=self._norm_factor,\
             gamma=self._gamma)
 
@@ -281,7 +302,7 @@ class IntertwinedSwissRolls(Dataset):
             k=self._k, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, t_min=self._t_min, t_max=self._t_max, omega=self._omega,\
             num_turns=self._num_turns, noise=self._noise, correct=self._correct,\
-            scale=self._scale, g=self.g_contract, d_g=self.dg_contract, height=self._height, rotation=self._rotation,\
+            scale=self._scale, g=self.g_contract_text, d_g=self.dg_contract_text, height=self._height, rotation=self._rotation,\
             translation=self._translation, normalize=self._normalize, norm_factor=self._norm_factor,\
             gamma=self._gamma)
 
@@ -307,9 +328,9 @@ class IntertwinedSwissRolls(Dataset):
         # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
         self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[:self.S1.genattrs.N, 1] = -1
+        self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
         self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[self.S1.genattrs.N:, 0] = -1
+        self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
@@ -344,16 +365,16 @@ class IntertwinedSwissRolls(Dataset):
             self.norm_factor = max_coord - min_coord
         
         self.normed_all_points = self.all_points / self.norm_factor
-        self.normed_distances = self.all_distances / self.norm_factor
-        self.normed_actual_distances = self.all_actual_distances / self.norm_factor
+        self.normed_all_distances = self.all_distances / self.norm_factor
+        self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
 
         self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
-        self.S1.genattrs.normed_distances = self.normed_distances[:self._N//2]
-        self.S1.genattrs.normed_actual_distances = self.normed_actual_distances[:self._N//2]
+        self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
+        self.S1.genattrs.normed_actual_distances = self.normed_all_actual_distances[:self._N//2]
 
         self.S2.genattrs.normed_points_n = self.normed_all_points[self._N//2:]
-        self.S2.genattrs.normed_distances = self.normed_all_points[self._N//2:]
-        self.S2.genattrs.normed_actual_distances = self.normed_all_points[self._N//2:]
+        self.S2.genattrs.normed_distances = self.normed_all_distances[self._N//2:]
+        self.S2.genattrs.normed_actual_distances = self.normed_all_actual_distances[self._N//2:]
 
 
         # change anchor point to bring it closer to origin (smaller numbers are easier to learn)
@@ -361,6 +382,10 @@ class IntertwinedSwissRolls(Dataset):
         self.fix_center = tmp * np.ones(self._n)
         anchor = self.normed_all_points[np.argmin(self.S1.specattrs.t)]
         self.normed_all_points = self.normed_all_points - anchor + self.fix_center
+
+        self.normed_all_points = self.normed_all_points.float()
+        self.normed_all_distances = self.normed_all_distances.float()
+        self.normed_all_actual_distances = self.normed_all_actual_distances.float()
 
     def invert_points(self, normed_points):
         """invert normalised points to unnormalised values"""
@@ -391,8 +416,12 @@ class IntertwinedSwissRolls(Dataset):
             if attr in ["S1", "S2"]:
                 continue
             if attr in attrs:
-                if attr in ["g", "d_g", "g_contract", "dg_contract"]:
-                    attrs[attr] = eval(attrs[attr])
+                if attr in ["g", "d_g"]:
+                    attrs[attr] = eval(attrs[attr + "_text"])
+                elif attr == "g_contract":
+                    attrs[attr] = lambda x: eval(attrs["g_text"])(x) - attrs["contract"]
+                elif attr == "dg_contract":
+                    attrs[attr] = lambda x: eval(attrs["d_g_text"])(x)
                 setattr(self, attr, attrs[attr])
 
         self.S1 = RandomSwissRoll()
@@ -419,9 +448,11 @@ class IntertwinedSwissRolls(Dataset):
             if attr in ["S1", "S2"]:
                 continue
             if not isinstance(attr_set[attr], Iterable):
-                specs_attrs[attr] = attr_set[attr]
                 if attr in ["g", "d_g", "g_contract", "dg_contract"]:
-                    specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
+                    continue
+                specs_attrs[attr] = attr_set[attr]
+                
+                    # specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
             else:
                 data_attrs[attr] = attr_set[attr]
 
@@ -434,6 +465,103 @@ class IntertwinedSwissRolls(Dataset):
         self.S2.save_data(S2_dir)
 
         
+    @classmethod
+    def get_demo_cfg_dict(cls):
+
+        train_cfg_dict = {
+            "N": 100000,
+            "num_neg": None,
+            "n": 2,
+            "k": 2,
+            "D": 80,
+            "max_norm": 30,
+            "contract": 100,
+            "mu": 0,
+            "sigma": 1,
+            "seed": 42,
+            "gamma": 0.5,
+            "t_min": 150,
+            "t_max": 450,
+            "num_turns": None,
+            "omega": np.pi * 0.01
+        }
+
+        val_cfg_dict = copy.deepcopy(train_cfg_dict)
+        val_cfg_dict["seed"] = 101
+
+        test_cfg_dict = copy.deepcopy(train_cfg_dict)
+        test_cfg_dict["seed"] = 89
+
+        cfg_dict = {
+            "train": train_cfg_dict,
+            "val": val_cfg_dict,
+            "test": test_cfg_dict
+        }
+
+        return cfg_dict
+
+    @classmethod
+    def save_splits(cls, train_set, val_set, test_set, save_dir):
+        train_dir = os.path.join(save_dir, "train")
+        val_dir = os.path.join(save_dir, "val")
+        test_dir = os.path.join(save_dir, "test")
+    
+        if save_dir is not None:
+            os.makedirs(train_dir, exist_ok=True)
+            train_set.save_data(train_dir)
+            os.makedirs(val_dir, exist_ok=True)
+            val_set.save_data(val_dir)
+            os.makedirs(test_dir, exist_ok=True)
+            test_set.save_data(test_dir)
+
+        return train_set, val_set, test_set
+    
+    @classmethod
+    def make_train_val_test_splits(cls, cfg_dict=None, save_dir=None):
+
+        if cfg_dict is None:
+            cfg_dict = cls.get_demo_cfg_dict()
+
+        train_cfg = cfg_dict["train"]
+        train_set = cls(**train_cfg)
+        train_set.compute_points()
+
+        val_cfg = cfg_dict["val"]
+        val_cfg["rotation"] = train_set.rotation
+        val_cfg["translation"] = train_set.translation
+        val_set = cls(**val_cfg)
+        val_set.compute_points()
+
+        test_cfg = cfg_dict["test"]
+        test_cfg["rotation"] = train_set.rotation
+        test_cfg["translation"] = train_set.translation
+        test_set = cls(**test_cfg)
+        test_set.compute_points()
+
+        if save_dir is not None:
+            cls.save_splits(train_set, val_set, test_set, save_dir)
+
+        return train_set, val_set, test_set
+
+    @classmethod
+    def load_splits(cls, dump_dir):
+
+        train_dir = os.path.join(dump_dir, "train")
+        os.makedirs(train_dir, exist_ok=True)
+        train_set = cls()
+        train_set.load_data(train_dir)
+
+        val_dir = os.path.join(dump_dir, "val")
+        os.makedirs(val_dir, exist_ok=True)
+        val_set = cls()
+        val_set.load_data(val_dir)
+
+        test_dir = os.path.join(dump_dir, "test")
+        os.makedirs(test_dir, exist_ok=True)
+        test_set = cls()
+        test_set.load_data(test_dir)
+
+        return train_set, val_set, test_set
 
 
 

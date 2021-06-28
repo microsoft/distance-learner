@@ -249,6 +249,7 @@ class MTMLPwithNormalisation(nn.Module):
     def forward(self, X):
         shared_logits = self.shared_layers(X)
         logits = torch.zeros((X.shape[0], self.output_size))
+        logits = logits.to(shared_logits.device)
 
         start_idx = 0
 
@@ -435,7 +436,6 @@ class MTLModelForDistanceAndClass(nn.Module):
         self.output_size = output_size
 
         self.shared_resnet = self.ResNet18(num_classes=512)
-        loss_func = nn.MSELoss()
 
 
         self.distance_branch = nn.Sequential(OrderedDict([

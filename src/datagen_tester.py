@@ -22,5 +22,7 @@ dummy_params = {
 }
 
 
-test = IntertwinedSwissRolls(**dummy_params)
-test.compute_points()
+# test = IntertwinedSwissRolls(**dummy_params)
+# test.compute_points()
+train_set, val_set, test_set = IntertwinedSwissRolls.make_train_val_test_splits(save_dir="./test")
+train_set, val_set, test_set = IntertwinedSwissRolls.load_splits(dump_dir="./test")

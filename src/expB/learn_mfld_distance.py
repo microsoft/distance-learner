@@ -80,6 +80,7 @@ def masked_mse_loss_for_far_mfld(logits, targets):
         gt_far_classes = torch.max(targets, axis=1)[1]
         mask = torch.zeros_like(targets, requires_grad=False)
         mask[torch.arange(0, mask.shape[0]), gt_far_classes] = 1
+        mask = mask.to(logits.device)
         # targets[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
         # logits[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
         # print(targets, gt_far_classes, mask, mask.shape)
@@ -90,6 +91,8 @@ def masked_mse_loss_for_far_mfld(logits, targets):
 
     else:
         unmask = targets != np.inf
+        unmask = unmask.to(logits.device)
+        # print(unmask.device, logits.device, targets.device)
         loss = ((logits[unmask] - targets[unmask]) ** 2).sum() / unmask.sum()
     return loss
 
@@ -132,16 +135,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     # storing the start_lr
     start_lr = optimizer.param_groups[0]['lr']
     
-    TIME_STAMP = time.strftime("%d%m%Y-%H%M%S")
-    print("test:",type(num_epochs), type(len(dataloaders["train"])))
     train_loss_matrix = torch.zeros((num_epochs, len(dataloaders["train"])))
     val_loss_matrix = torch.zeros((num_epochs, len(dataloaders["val"])))
     
 
-    save_dir = os.path.join(save_dir, name)
-    model_dir = os.path.join(save_dir, TIME_STAMP, "models")
-    plot_dir = os.path.join(save_dir, TIME_STAMP, "tensorboard")
-    specs_dump_fn = os.path.join(save_dir, TIME_STAMP, "specs.json")
+    # save_dir = os.path.join(save_dir, name)
+    model_dir = os.path.join(save_dir, "models")
+    plot_dir = os.path.join(save_dir, "tensorboard")
+    specs_dump_fn = os.path.join(save_dir, "specs.json")
     
     os.makedirs(save_dir, exist_ok=True)
     os.makedirs(model_dir, exist_ok=True)
@@ -150,7 +151,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     with open(specs_dump_fn, "w+") as f:
         json.dump(specs_dict, f)
     
-    plot_fn = os.path.join(plot_dir, name + "_" + TIME_STAMP)
+    plot_fn = os.path.join(plot_dir, name)
 
     writer = SummaryWriter(plot_fn)
     # liveloss = PlotLosses(fig_path=plot_fn)
@@ -168,7 +169,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             plt.close(fig_plot)
         return fig_plot
 
-    if hasattr(dataloaders["train"].dataset.genattrs, "distances"):
+    if hasattr(dataloaders["train"].dataset, "genattrs") and hasattr(dataloaders["train"].dataset.genattrs, "distances"):
         writer.add_histogram("train/distances", dataloaders["train"].dataset.genattrs.distances)
         writer.add_histogram("val/distances", dataloaders["val"].dataset.genattrs.distances)
 
@@ -302,18 +303,18 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 points = points.to(device)
                 targets = targets.to(device)
                 # classes = batch[2].to(device)
-                
+                # print("where is input?", points.device)
                 
 
                 model = model.to(device)
-                
+                # print("where is model?", next(model.parameters()).is_cuda)
                 logits = None
                 if phase == "val":
                     with torch.no_grad():
                         logits = model(points)
                 elif phase == "train":
                     logits = model(points)
-
+                    # print("where are logits?", logits.device)
                 # print(points.shape, distances.shape, logits.shape)
 
                 # weights in case of weighted loss
@@ -416,7 +417,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 dump["val_f1"] = logs["val_f1"]
 
             if debug:   
-                torch.save(dump, os.path.join(model_dir, name + "_"+ TIME_STAMP + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
+                torch.save(dump, os.path.join(model_dir, name + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
             else:
                 torch.save(dump, os.path.join(model_dir, "ckpt" + ".pth"))
 
@@ -439,14 +440,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
         torch.save(epoch_wise_logits, os.path.join(save_dir, "epoch_wise_val_logits.pt"))
         torch.save(epoch_wise_targets, os.path.join(save_dir, "epoch_wise_val_targets.pt"))
 
-    return model, optimizer, train_loss_matrix, val_loss_matrix
+    return model, optimizer, scheduler, train_loss_matrix, val_loss_matrix
 
                     
             
 
 def test(model, dataloader, device, task="regression",\
      feature_name="normed_points", target_name="normed_distances",\
-     save_dir=None, specs_dict=None, name="data"):
+     save_dir=None, specs_dict=None, name="data", debug=False):
     
     model.eval()
     
@@ -501,7 +502,7 @@ def test(model, dataloader, device, task="regression",\
             #     else:
             #         all_classes = torch.cat((all_classes, classes))
             
-    print("name:", name)
+    if debug: print("name:", name)
 
     targets_fn, logits_fn, specs_fn = None, None, None
 
@@ -535,14 +536,15 @@ def test(model, dataloader, device, task="regression",\
             torch.save(all_logits, logits_fn)
 
 
-
-        print("MSE for the learned distances:", mse)
-        print("MSE for the learned distances (on-manifold):", mse_on_mfld)
+        if debug:
+            print("MSE for the learned distances:", mse)
+            print("MSE for the learned distances (on-manifold):", mse_on_mfld)
         return mse, mse_on_mfld, all_targets, all_logits
     
     elif task == "clf":
         y_pred = torch.max(all_logits, axis=1)[1]
-        print(classification_report(all_targets.reshape(-1), y_pred))
+        if debug:
+            print(classification_report(all_targets.reshape(-1), y_pred))
         acc = accuracy_score(all_targets.reshape(-1), y_pred)
         f1 = f1_score(all_targets.reshape(-1), y_pred)
         
@@ -557,7 +559,7 @@ def test(model, dataloader, device, task="regression",\
     
     
 
-    print("\n")
+    if debug: print("\n")
 
     
 
@@ -738,7 +740,7 @@ if __name__ == '__main__':
 
 
 
-        model, optimizer, train_loss_matrix, val_loss_matrix = train(model=model, optimizer=optimizer, loss_func=loss_func, dataloaders=dataloaders,\
+        model, optimizer, scheduler, train_loss_matrix, val_loss_matrix = train(model=model, optimizer=optimizer, loss_func=loss_func, dataloaders=dataloaders,\
                          device=device, task=TASK, num_epochs=NUM_EPOCHS, save_dir=SAVE_DIR, feature_name=FTNAME, target_name=TGTNAME,\
                          name=NAME, scheduler=scheduler, scheduler_params=scheduler_params, specs_dict=specs_dict)
 
