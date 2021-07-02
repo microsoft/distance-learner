@@ -9,7 +9,7 @@ model_ingredient = Ingredient('model')
 @model_ingredient.config
 def model_cfg():
     
-    model_type = "mt-mlp-norm"
+    model_type = "mt-mlp-norm" # see the model_type dictionary in expB/learn_manifold_distance.py for possible values.
     input_size = 2
     output_size = 2
     hidden_sizes = [512] * 4
