@@ -522,8 +522,10 @@ class RandomSwissRoll(Manifold, Dataset):
         # change anchor point to bring it closer to origin (smaller numbers are easier to learn)
         tmp = self._genattrs.gamma if self._genattrs.gamma is not None else 1
         self._genattrs.fix_center = tmp * np.ones(self._genattrs.n)
-        anchor = self._genattrs.normed_points_n[np.argmin(self._specattrs.t)]
-        self._genattrs.normed_points_n = self._genattrs.normed_points_n - anchor + self._genattrs.fix_center
+        if self._genattrs.anchor is None:
+            self._genattrs._anchor = self._genattrs.normed_points_n[np.argmin(self._specattrs.t)]
+            assert (self._genattrs.anchor == self._genattrs._anchor).all()
+        self._genattrs.normed_points_n = self._genattrs.normed_points_n - self._genattrs.anchor + self._genattrs.fix_center
 
     def invert_points(self, normed_points):
         """invert normalised points to unnormalised values"""

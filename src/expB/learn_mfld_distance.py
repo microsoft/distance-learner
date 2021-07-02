@@ -47,6 +47,7 @@ from expB.ptcifar.models import ResNet18
 from expB.myNNs import *
 from expB.workspace import *
 
+from datagen.synthetic.multiple.intertwinedswissrolls import IntertwinedSwissRolls
 
 
 
@@ -363,7 +364,8 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                     target_classes[i*points.shape[0]:(i+1)*points.shape[0]] = targets
             
             if task == "clf":
-                f1 = f1_score(target_classes, pred_classes)
+                average = "binary" if model.output_size == 2 else "macro"
+                f1 = f1_score(target_classes, pred_classes, average=average)
                 acc = accuracy_score(target_classes, pred_classes)
 
                 logs[prefix + "f1"] = f1
@@ -545,8 +547,10 @@ def test(model, dataloader, device, task="regression",\
         y_pred = torch.max(all_logits, axis=1)[1]
         if debug:
             print(classification_report(all_targets.reshape(-1), y_pred))
+        
         acc = accuracy_score(all_targets.reshape(-1), y_pred)
-        f1 = f1_score(all_targets.reshape(-1), y_pred)
+        average = "binary" if model.output_size == 2 else "macro"
+        f1 = f1_score(all_targets.reshape(-1), y_pred, average=average)
         
         if save_dir is not None:
             torch.save(all_targets, targets_fn)
@@ -668,7 +672,12 @@ if __name__ == '__main__':
         
         train_set = torch.load(TRAIN_FN)
         val_set = torch.load(VAL_FN)
-        
+
+        # train_set = IntertwinedSwissRolls()
+        # train_set.load_data(TRAIN_FN)
+        # val_set = IntertwinedSwissRolls()
+        # val_set.load_data(VAL_FN)
+        # train_set, val_set, test_set = IntertwinedSwissRolls.make_train_val_test_splits(save_dir=os.path.join(SAVE_DIR, "data"))
         
         # train_perm = torch.randperm(train_set.N)
         # val_perm = torch.randperm(val_set.N)

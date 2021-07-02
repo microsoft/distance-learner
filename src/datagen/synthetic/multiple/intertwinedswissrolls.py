@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import json
 import copy
@@ -23,7 +24,7 @@ class IntertwinedSwissRolls(Dataset):
     def __init__(self, N=1000, num_neg=None, n=100, k=3, D=1.5, max_norm=2, mu=10,\
                  sigma=5, seed=42, t_min=1.5, t_max=4.5, omega=np.pi, num_turns=None, noise=0,\
                  correct=True, scale=None, contract=2, g=identity, d_g=d_identity,\
-                 height=21, rotation=None, translation=None, normalize=True, norm_factor=None,\
+                 height=21, rotation=None, translation=None, anchor=None, normalize=True, norm_factor=None,\
                  gamma=0.5, **kwargs):
 
         """
@@ -70,6 +71,8 @@ class IntertwinedSwissRolls(Dataset):
         self._contract = contract
         self._height = height
         
+        self._anchor = anchor
+
         self._rotation = rotation
         if self._rotation is None:
             self._rotation = np.random.normal(self._mu, self._sigma, (self._n, self._n))
@@ -101,6 +104,7 @@ class IntertwinedSwissRolls(Dataset):
         self.S1 = None
         self.S2 = None
 
+        self.all_points_k = None
         self.all_points = None
         self.all_distances = None
         self.all_actual_distances = None
@@ -266,6 +270,15 @@ class IntertwinedSwissRolls(Dataset):
         raise RuntimeError("cannot set `height` after instantiation!")
     
     @property
+    def anchor(self):
+        return self._anchor
+
+    @anchor.setter
+    def anchor(self, x):
+        raise RuntimeError("cannot set `anchor` after instantiation!")
+
+
+    @property
     def rotation(self):
         return self._rotation
 
@@ -337,11 +350,11 @@ class IntertwinedSwissRolls(Dataset):
         self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
         self.class_labels = torch.from_numpy(self.class_labels).long()
 
-        
-
         if self._normalize:
             self.norm()
             print("[InterTwinedSwissRolls]: Overall noramalization done")
+
+        self.get_all_points_k()
 
     def __len__(self):
         return self.all_points.shape[0]
@@ -380,12 +393,35 @@ class IntertwinedSwissRolls(Dataset):
         # change anchor point to bring it closer to origin (smaller numbers are easier to learn)
         tmp = self.gamma if self.gamma is not None else 1
         self.fix_center = tmp * np.ones(self._n)
-        anchor = self.normed_all_points[np.argmin(self.S1.specattrs.t)]
-        self.normed_all_points = self.normed_all_points - anchor + self.fix_center
+        if self.anchor is None:
+            self._anchor = self.normed_all_points[np.argmin(self.S1.specattrs.t)]
+            assert (self.anchor == self._anchor).all()
+        self.normed_all_points = self.normed_all_points - self.anchor + self.fix_center
 
         self.normed_all_points = self.normed_all_points.float()
         self.normed_all_distances = self.normed_all_distances.float()
         self.normed_all_actual_distances = self.normed_all_actual_distances.float()
+
+    def get_all_points_k(self):
+        """
+        get the k-dim embedding of all the normalised points
+        
+        (only call after normalization, although in the case of swiss rolls it does not matter)
+        """
+        if self.normed_all_points is None:
+            raise RuntimeError("this function is made for normalised points!")
+
+        k_dim_samples = np.zeros((self.N, self.k))
+        start = 0
+        for attr in vars(self):
+            if len(re.findall(r'S[0-9]+', attr)) > 0:
+                N_attr = getattr(self, attr).genattrs.N
+                k_dim_samples[start:start + N_attr//2] = getattr(self, attr).genattrs.points_k
+                k_dim_samples[start + N_attr//2:start + N_attr] = getattr(self, attr).genattrs.pre_images_k
+                start += N_attr
+
+        self.all_points_k = torch.from_numpy(k_dim_samples).float()
+        return k_dim_samples
 
     def invert_points(self, normed_points):
         """invert normalised points to unnormalised values"""
@@ -466,15 +502,15 @@ class IntertwinedSwissRolls(Dataset):
 
         
     @classmethod
-    def get_demo_cfg_dict(cls):
+    def get_demo_cfg_dict(cls, n=3, k=2):
 
         train_cfg_dict = {
             "N": 100000,
             "num_neg": None,
-            "n": 2,
-            "k": 2,
-            "D": 80,
-            "max_norm": 30,
+            "n": n,
+            "k": k,
+            "D": 20,
+            "max_norm": 40,
             "contract": 100,
             "mu": 0,
             "sigma": 1,
@@ -487,9 +523,11 @@ class IntertwinedSwissRolls(Dataset):
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)
+        val_cfg_dict["N"] = 10000
         val_cfg_dict["seed"] = 101
 
         test_cfg_dict = copy.deepcopy(train_cfg_dict)
+        test_cfg_dict["N"] = 10000
         test_cfg_dict["seed"] = 89
 
         cfg_dict = {
@@ -529,12 +567,16 @@ class IntertwinedSwissRolls(Dataset):
         val_cfg = cfg_dict["val"]
         val_cfg["rotation"] = train_set.rotation
         val_cfg["translation"] = train_set.translation
+        val_cfg["anchor"] = train_set.anchor
+        val_cfg["norm_factor"] = train_set.norm_factor
         val_set = cls(**val_cfg)
         val_set.compute_points()
 
         test_cfg = cfg_dict["test"]
         test_cfg["rotation"] = train_set.rotation
         test_cfg["translation"] = train_set.translation
+        test_cfg["anchor"] = train_set.anchor
+        test_cfg["norm_factor"] = train_set.norm_factor
         test_set = cls(**test_cfg)
         test_set.compute_points()
 

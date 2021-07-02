@@ -24,7 +24,7 @@ class GeneralManifoldAttrs(object):
 
     def __init__(self, N=1000, num_neg=None, n=100, k=3, D=50.0,\
                  max_norm=2.0, mu=10, sigma=5, seed=42, normalize=True,\
-                 norm_factor=1, gamma=0.5, rotation=None, translation=None, **kwargs):
+                 norm_factor=1, gamma=0.5, anchor=None, rotation=None, translation=None, **kwargs):
         """
         :param N: total number of samples
         :type N: int
@@ -50,6 +50,8 @@ class GeneralManifoldAttrs(object):
         :type norm_factor: float
         :param gamma: conservative factor used in normalization
         :type gamma: int
+        :param anchor: anchor point used during normalization
+        :type anchor: torch.Tensor
         :param rotation: rotation matrix to be used
         :type numpy.ndarray:
         :param translation: translation vector to be used
@@ -73,6 +75,7 @@ class GeneralManifoldAttrs(object):
         self._rotation = None
         self._translation = None
 
+        self._anchor = None
         if translation is None:
             self._translation = np.random.normal(mu, sigma, n)
         else:
@@ -164,6 +167,10 @@ class GeneralManifoldAttrs(object):
     @property
     def norm_factor(self):
         return self._norm_factor
+
+    @property
+    def anchor(self):
+        return self._anchor
 
     @property
     def rotation(self):

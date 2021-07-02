@@ -28,10 +28,10 @@ data_ingredient = Ingredient('data')
 @data_ingredient.config
 def data_cfg():
     mtype = "ittw-swissrolls" # manifold type
-    generate = True # generate fresh dataset
+    generate = False # generate fresh dataset
     logdir = "/azuredrive/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls/" # high-level dump folder
     data_tag = "rdm_swiss_rolls_k2n2" # low-level data directory name
-    data_dir = os.path.join(logdir, "data", data_tag) # complete data directory path
+    data_dir = os.path.join(logdir, data_tag, "data") # complete data directory path
     data_params = DATA_CONFIGS[mtype]()
 
 

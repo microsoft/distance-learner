@@ -292,7 +292,10 @@ class RandomSphere(Manifold, Dataset):
         # change centre to bring it closer to origin (smaller numbers are easier to learn)
         tmp = self._genattrs.gamma if self._genattrs.gamma is not None else 1
         self._genattrs.fix_center = tmp * np.ones(self._genattrs.n)
-        self._genattrs.normed_points_n = self._genattrs.normed_points_n - self._specattrs.normed_x_cn + self._genattrs.fix_center
+        if self._genattrs._anchor is None:
+            self._genattrs._anchor = self._specattrs.normed_x_cn
+            assert (self._genattrs.anchor == self._genattrs._anchor).all()
+        self._genattrs.normed_points_n = self._genattrs.normed_points_n - self._genattrs.anchor + self._genattrs.fix_center
 
         self._genattrs.normed_points_n = self._genattrs.normed_points_n.float()
         self._genattrs.normed_distances = self._genattrs.distances.float()

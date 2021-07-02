@@ -38,16 +38,16 @@ def sphere_cfg():
 def ittw_swissrolls_cfg():
 
     train_cfg = {
-        "N": 200000,
+        "N": 100000,
         "num_neg": None,
         "n": 2,
         "k": 2,
-        "D": 30,
+        "D": 20,
         "max_norm": 40,
         "contract": 100,
         "mu": 0,
         "sigma": 1,
-        "seed": 42,
+        "seed": 23,
         "gamma": 0.5,
         "t_min": 150,
         "t_max": 450,
@@ -56,7 +56,11 @@ def ittw_swissrolls_cfg():
     }
 
     val_cfg = copy.deepcopy(train_cfg)
+    val_cfg["N"] = 20000
+    val_cfg["seed"] = 101
     test_cfg = copy.deepcopy(train_cfg)
+    test_cfg["N"] = 20000
+    test_cfg["seed"] = 89
 
     cfg = {
         "train": train_cfg,
