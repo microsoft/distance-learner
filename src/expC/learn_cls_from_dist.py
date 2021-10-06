@@ -85,7 +85,7 @@ def argmin_dist_clf(inputs, targets, class_labels, thresh, on_mfld=True, off_mfl
         :type targets: torch.Tensor
         :param class_labels: class labels from the dataset
         :type class_labels: torch.Tensor
-        :param thresh: threshold o classify a point as off-manifold
+        :param thresh: threshold to classify a point as off-manifold
         :type thresh: float
         :param on_mfld: find stats for on manifold points (only works for well-separate manifolds)
         :type on_mfld: bool
@@ -357,15 +357,17 @@ def run_eval(data, model, dataloaders, datasets, cuda, task, ftname, tgtname, in
                         """
                         if training has been done on on-mfld. points but results are needed over
                         all of the dataset, then off-mfld. points should be removed, since the
-                        network cannot pred
+                        network cannot predict an off manifold label
                         """
                         pred_labels = pred_labels[true_labels != OFF_MFLD_LABEL]
                         true_labels = true_labels[true_labels != OFF_MFLD_LABEL]
                     
                     if not train_on_onmfld:
-                        # training is done on off manifold samples and
-                        # then off manifold label can be predicted and 
-                        # therefore needs to be included in labels
+                        """
+                        training is done on off manifold samples and
+                        then off manifold label can be predicted and 
+                        therefore needs to be included in labels
+                        """
                         target_names = target_names[:-1] + ["off manifold"]
                     
 
