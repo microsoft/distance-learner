@@ -66,6 +66,8 @@ class GeneralManifoldAttrs(object):
         self._k = k
         self._D = D
         self._max_norm = max_norm
+        if self._D > self._max_norm:
+            raise RuntimeWarning("D > max_norm: this is a trivial case. You might want to set D <= max_norm")
         self._mu = mu
         self._sigma = sigma
         self._seed = seed

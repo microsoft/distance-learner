@@ -372,7 +372,7 @@ class IntertwinedSwissRolls(Dataset):
 
     def norm(self):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
-        if self._norm_factor is None:
+        if self.norm_factor is None:
             min_coord = torch.min(self.all_points).item()
             max_coord = torch.max(self.all_points).item()
             self.norm_factor = max_coord - min_coord

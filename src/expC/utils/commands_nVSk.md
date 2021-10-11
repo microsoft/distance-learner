@@ -572,6 +572,8 @@ python3 learn_cls_from_dist.py with cuda=0 data.logdir=/azuredrive/dumps/expC_di
 python3 analysis.py --dump_dir=/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/rdm_swrolls_k5n1000/3 --on=test --num_points=50000
 ```
 
+- - -
+
 ## k = 10, n = 10
 
 
@@ -707,6 +709,8 @@ python3 learn_cls_from_dist.py with cuda=0 data.logdir=/azuredrive/dumps/expC_di
 python3 analysis.py --dump_dir=/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/rdm_swrolls_k10n1000/3 --on=test --num_points=50000
 ```
 
+- - -
+
 ## k = 50, n = 50
 
 
@@ -798,6 +802,8 @@ python3 learn_cls_from_dist.py with cuda=0 data.logdir=/azuredrive/dumps/expC_di
 
 python3 analysis.py --dump_dir=/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/rdm_swrolls_k50n1000/1 --on=test --num_points=50000
 ```
+
+- - -
 
 ### Command to train Standard Classifier
 

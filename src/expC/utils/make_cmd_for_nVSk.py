@@ -22,7 +22,8 @@ mkdown_text = """
 """
 
 mtype = "ittw-swissrolls"
-logdir = "/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/"
+# logdir = "/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/"
+logdir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/"
 data_tag_prefix = "rdm_swrolls_"
 cuda = 0
 dims = [2, 3, 5, 10, 50, 100, 500, 1000]
@@ -32,7 +33,7 @@ analysis_cmd_prefix = "python3 analysis.py --dump_dir={} --on=test --num_points=
 expt_scenarios = ["task=regression", "task=clf train_on_onmfld=True", "model.output_size=3 task=clf train_on_onmfld=False"]
 scenario_texts = ["### Command to train Distance-learner", "### Command to train Standard Classifier", "### Command to train Standard Classifier with Off-manifold label"]
 
-out_file = "./commands_nVSk.md"
+out_file = "./commands_nVSk_swrolls.md"
 
 for kidx in range(len(dims)):
     for nidx in range(kidx, len(dims)):

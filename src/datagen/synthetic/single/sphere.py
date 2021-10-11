@@ -23,8 +23,8 @@ class SpecificSphereAttrs(SpecificManifoldAttrs):
         """
         :param r: radius of the sphere
         :type r: float
-        :param x_cn: coordinates of the centre in k-dim space
-        :type x_cn: numpy.array
+        :param x_ck: coordinates of the centre in k-dim space
+        :type x_ck: numpy.array
         """
 
         self._mu = mu
@@ -109,7 +109,7 @@ class RandomSphere(Manifold, Dataset):
     def __init__(self, genattrs=None, specattrs=None, N=1000, num_neg=None,\
                  n=100, k=3, r=10.0, D=50.0, max_norm=2.0, mu=10, sigma=5, seed=42,\
                  x_ck=None, rotation=None, translation=None, normalize=True,\
-                 norm_factor=None, gamma=0.5):
+                 norm_factor=None, gamma=0.5, anchor=None):
         """constructor for class containing a random sphere"""
 
         self._genattrs = genattrs
@@ -119,12 +119,12 @@ class RandomSphere(Manifold, Dataset):
             self._genattrs = GeneralManifoldAttrs(N=N, num_neg=num_neg,\
                  n=n, k=k, D=D, max_norm=max_norm, mu=mu, sigma=sigma,\
                  seed=seed, normalize=normalize, norm_factor=norm_factor,\
-                 gamma=gamma, rotation=rotation, translation=translation)
+                 gamma=gamma, rotation=rotation, translation=translation, anchor=anchor)
 
         if not isinstance(specattrs, SpecificSphereAttrs):
             self._specattrs = SpecificSphereAttrs(mu=self._genattrs.mu,\
                  sigma=self._genattrs.sigma, seed=self._genattrs.seed,\
-                 n=self._genattrs.n, x_ck=x_ck)
+                 n=self._genattrs.n, x_ck=x_ck, r=r)
 
         ## setting seed
         torch.manual_seed(self._genattrs.seed)
@@ -284,6 +284,7 @@ class RandomSphere(Manifold, Dataset):
             # NOTE: using `_norm_factor` to set `norm_factor` in `self._genattrs`. DO NOT MAKE THIS A HABIT!!!
             self._genattrs._norm_factor = self._genattrs.gamma * np.max(np.linalg.norm(self._genattrs.points_n - self._specattrs.x_cn, ord=2, axis=1)).item()
             assert self._genattrs.norm_factor == self._genattrs._norm_factor
+        # print("sphere norm_factors", self._genattrs.norm_factor, self._genattrs._norm_factor)
         self._genattrs.normed_points_n = self._genattrs.points_n / self._genattrs.norm_factor
         self._specattrs.normed_x_cn = self._specattrs.x_cn / self._genattrs.norm_factor
         self._genattrs.normed_distances = self._genattrs.distances / self._genattrs.norm_factor
@@ -295,6 +296,7 @@ class RandomSphere(Manifold, Dataset):
         if self._genattrs._anchor is None:
             self._genattrs._anchor = self._specattrs.normed_x_cn
             assert (self._genattrs.anchor == self._genattrs._anchor).all()
+        # print("anchor and fix_centers", self._genattrs.anchor, self._genattrs.fix_center)
         self._genattrs.normed_points_n = self._genattrs.normed_points_n - self._genattrs.anchor + self._genattrs.fix_center
 
         self._genattrs.normed_points_n = self._genattrs.normed_points_n.float()
