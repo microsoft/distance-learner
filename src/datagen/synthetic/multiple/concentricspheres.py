@@ -278,9 +278,11 @@ class ConcentricSpheres(Dataset):
         # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
         self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
+        # self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
+        self.all_actual_distances[:self.S1.genattrs.N, 1] = 1
         self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
+        # self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
+        self.all_actual_distances[self.S1.genattrs.N:, 0] = 1
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
@@ -307,8 +309,9 @@ class ConcentricSpheres(Dataset):
         for attr in vars(self):
             if len(re.findall(r'S[0-9]+', attr)) > 0:
                 N_attr = getattr(self, attr).genattrs.N
-                k_dim_samples[start:start + N_attr//2] = getattr(self, attr).genattrs.points_k
-                k_dim_samples[start + N_attr//2:start + N_attr] = getattr(self, attr).genattrs.pre_images_k
+                num_neg_attr = getattr(self, attr).genattrs.num_neg
+                k_dim_samples[start:start + N_attr - num_neg_attr] = getattr(self, attr).genattrs.points_k
+                k_dim_samples[start + N_attr - num_neg_attr:start + N_attr] = getattr(self, attr).genattrs.pre_images_k
                 start += N_attr
 
         self.all_points_k = torch.from_numpy(k_dim_samples).float()

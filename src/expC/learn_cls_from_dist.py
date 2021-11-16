@@ -150,14 +150,18 @@ def config(data, model):
     test = False # test flag
     cuda = 0 # GPU device id for training
 
+    debug = False # Flag for saving epoch wise logits and other debugging stuff
+
     num_workers = 8
     OFF_MFLD_LABEL = 2
 
     batch_size = 512
     task = "regression" # "regression" or "clf"
     train_on_onmfld = True # flag for only training on on-mfld. samples (only useful for stdclf.)
+
     if task == "regression":
         train_on_onmfld = False # default should be False for regression
+    
     num_epochs = 500
     warmup = 10
     cooldown = 300
@@ -252,7 +256,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
 
 @ex.capture
 def run_training(num_epochs, task, loss_func, lr, warmup,\
-     cooldown, cuda, ftname, tgtname, name, save_dir, _log):
+     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log):
 
 
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
@@ -274,7 +278,7 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
     
     model, optimizer, scheduler, _, _ = lmd.train(model, optimizer, loss_function,\
         dataloaders, device, save_dir, scheduler, feature_name=ftname, target_name=tgtname,\
-        num_epochs=num_epochs, task=task, name=name, scheduler_params=scheduler_params, specs_dict=None, debug=False)
+        num_epochs=num_epochs, task=task, name=name, scheduler_params=scheduler_params, specs_dict=None, debug=debug)
 
     return model, optimizer, scheduler, datasets, dataloaders
 

@@ -66,8 +66,6 @@ class GeneralManifoldAttrs(object):
         self._k = k
         self._D = D
         self._max_norm = max_norm
-        if self._D > self._max_norm:
-            raise RuntimeWarning("D > max_norm: this is a trivial case. You might want to set D <= max_norm")
         self._mu = mu
         self._sigma = sigma
         self._seed = seed
@@ -366,7 +364,7 @@ class Manifold(ABC):
         remaining_span_set = np.zeros((remaining_dims, self._genattrs.n))
         remaining_span_set[:, self._genattrs.k:] = leftover_basis
 
-        # coefficients for the remaining bases vectors
+        # coefficients for the remaining basis vectors
         remaining_coefficients = np.random.normal(self._genattrs.mu,\
              self._genattrs.sigma, size=(self._genattrs.num_neg, self._genattrs.n))
         # sum of the remaning span set

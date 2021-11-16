@@ -228,7 +228,7 @@ class RandomSphere(Manifold, Dataset):
     def compute_normals(self):
         
         # normal_vectors_to_mfld_at_p are actually centred at x_ck, but 
-        # we can imaging the same vector at $p$, and later adjust the coordinates
+        # we can imagine the same vector at $p$, and later adjust the coordinates
         # by adding the position vector of $p$ back.
         #
         # Also note that these negative examples are being generated using the pre-images
@@ -579,8 +579,9 @@ class RandomSphere(Manifold, Dataset):
 
         attrs = {**specs_attrs, **data_attrs}
 
-        self._genattrs = GeneralManifoldAttrs(**attrs)
-        self._specattrs = SpecificSphereAttrs(**attrs)
+        inp_attrs = {i.lstrip("_"): attrs[i] for i in attrs}
+        self._genattrs = GeneralManifoldAttrs(**inp_attrs)
+        self._specattrs = SpecificSphereAttrs(**inp_attrs)
 
         for attr_set in [self._genattrs, self._specattrs]:
             for attr in vars(attr_set):

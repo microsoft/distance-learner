@@ -21,10 +21,12 @@ mkdown_text = """
 # Commands for Experiment 3a
 """
 
-mtype = "ittw-swissrolls"
+# mtype = "ittw-swissrolls"
+mtype = "conc-spheres"
 # logdir = "/azuredrive/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/"
-logdir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_swrolls/"
-data_tag_prefix = "rdm_swrolls_"
+logdir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_concspheres/"
+# data_tag_prefix = "rdm_swrolls_"
+data_tag_prefix = "rdm_concspheres"
 cuda = 0
 dims = [2, 3, 5, 10, 50, 100, 500, 1000]
 
@@ -33,7 +35,7 @@ analysis_cmd_prefix = "python3 analysis.py --dump_dir={} --on=test --num_points=
 expt_scenarios = ["task=regression", "task=clf train_on_onmfld=True", "model.output_size=3 task=clf train_on_onmfld=False"]
 scenario_texts = ["### Command to train Distance-learner", "### Command to train Standard Classifier", "### Command to train Standard Classifier with Off-manifold label"]
 
-out_file = "./commands_nVSk_swrolls.md"
+out_file = "./commands_nVSk_concspheres.md"
 
 for kidx in range(len(dims)):
     for nidx in range(kidx, len(dims)):
