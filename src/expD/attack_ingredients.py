@@ -18,8 +18,7 @@ def attack_cfg():
     norm = [2, np.inf] # [2, np.inf]
     restarts = [1]
 
-    thresh = np.arange(1e-2, 1.6e-1, 1e-2) # if model is distance learner, then thresholds to analyse performance
-    thresh = np.append(thresh, np.inf)
+    verbose = [False] # used for verbose flag in attacks, used only for debugging, hence set to False
 
 @attack_ingredient.capture
 def get_atk(atk_flavor, task, atk_routine):

@@ -176,7 +176,7 @@ def config(data, model):
         loss_func = "cross_entropy"
 
     ftname = "normed_points" # feature from the dataset to train on
-    tgtname = "normed_actual_distances" # target values to train against
+    tgtname = "normed_smooth_distances" # target values to train against
     if task == "clf":
         tgtname = "classes"
 

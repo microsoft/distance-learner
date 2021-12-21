@@ -11,6 +11,7 @@ import copy
 import time
 import copy
 import random
+import logging
 
 from itertools import product
 
@@ -61,7 +62,20 @@ from attack_ingredients import attack_ingredient, get_atk
 from inpfn_ingredients import get_inp_fn, inpfn_ingredient
 from attacks import *
 
-ex = Experiment("stdclf_vs_distlearn", ingredients=[attack_ingredient, inpfn_ingredient])
+ex = Experiment("get_attack_perfs", ingredients=[attack_ingredient, inpfn_ingredient])
+
+# set up a custom logger
+logger = logging.getLogger("expD")
+logger.handlers = []
+ch = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s -- [%(levelname).1s] %(name)s >> %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
+logger.setLevel("INFO")
+
+# attach it to the experiment
+ex.logger = logger
+
 
 @ex.config
 def config(attack, input_files):
@@ -75,10 +89,14 @@ def config(attack, input_files):
     batch_size = 512
     use_split = "test" # data split to generate perturbations from
 
-    th_analyze = attack["thresh"]
+    th_analyze = np.arange(1e-2, 1.6e-1, 1e-2) # if model is distance learner, then thresholds to analyse performance
+    th_analyze = np.append(th_analyze, np.inf)
+
+    debug = True
 
     dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
+
 
 def load_run_config(run_dir):
 
@@ -86,6 +104,7 @@ def load_run_config(run_dir):
     run_config_file = os.path.join(run_dir, "config.json")
     with open(run_config_file) as f:
         run_config = json.load(f)
+    return run_config
 
 def load_model_for_run(run_dir):
     
@@ -102,15 +121,12 @@ def load_model_for_run(run_dir):
     return model_fn
 
 @ex.capture
-def load_data_for_run(run_dir, batch_size, num_workers):
-
-    # load the run config
-    run_config = load_run_config(run_dir)
+def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers):
 
     # loading the data
-    mtype = run_config["mtype"]
-    data_class = datagen[mtype]
-    data_dir = os.path.join(run_dir, "data")
+    mtype = run_config["data"]["mtype"]
+    data_class = datagen.dtype[mtype]
+    data_dir = os.path.join(run_parent_dir, "data")
     train_set, val_set, test_set = data_class.load_splits(data_dir)
 
     dataloaders = {
@@ -122,18 +138,31 @@ def load_data_for_run(run_dir, batch_size, num_workers):
     return dataloaders
 
 @ex.capture
-def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log):
+def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, dataloaders=None):
     
     result_container = list()
 
     run_dir = inp_dir
+    run_parent_dir = os.path.abspath(os.path.join(run_dir, os.pardir))
+    _log.info("working on: {}".format(run_dir))
 
-    model_fn = load_model_for_run(run_dir)
-    dataloaders = load_data_for_run(run_dir)
+    _log.info("loading model for run...")
+    model_fn = load_model_for_run(run_dir=run_dir)
+    _log.info("model loaded")
+    _log.info("loading config for run...")
+    run_config = load_run_config(run_dir=run_dir)
+    _log.info("config loaded")
+    _log.info("is data loaded: {}".format(dataloaders is None))
+    if dataloaders is None:
+        _log.info("loading data for run from parent directory: {} ...".format(run_parent_dir))
+        dataloaders = load_data_for_run(run_parent_dir=run_parent_dir, run_config=run_config)
+        _log.info("data loaded")
+    else:
+        _log.info("data already loaded")
 
-    run_config = load_run_config(run_dir)
     task = "dist" if run_config["task"] == "regression" else "clf"
-    
+    _log.info("task: {}".format(task))
+
     dataset = dataloaders[use_split].dataset
     data_param_dict = {
         "k": dataset.k,
@@ -167,19 +196,21 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         attack_param_dict["atk_routine"] = atk_routine
 
         result_parent_dir = os.path.join(run_dir, "attack_perf")
-        result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, task, atk_routine, eps, eps_iter, nb_iter, norm)
+        _log.info(result_tag)
+        result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, task, atk_routine, eps, eps_iter, nb_iter, norm, verbose)
         _log.info("perturbed ex will be dumped in: {}".format(result_dir))
 
         logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex = attack_model(dataloaders=dataloaders,\
-            model_fn=model_fn, attack_fn=attack_fn, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter, norm=norm, verbose=verbose, task=task)
+            model_fn=model_fn, attack_fn=attack_fn, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter, norm=norm, verbose=verbose)
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
-        torch.save({
-            "logits_of_pb_ex": logits_of_pb_ex,
-            "all_pb_ex": all_pb_ex,
-            "all_deltas": all_deltas,
-            "logits_of_raw_ex": logits_of_raw_ex
-        }, out_fn)
+        if not debug:
+            torch.save({
+                "logits_of_pb_ex": logits_of_pb_ex,
+                "all_pb_ex": all_pb_ex,
+                "all_deltas": all_deltas,
+                "logits_of_raw_ex": logits_of_raw_ex
+            }, out_fn)
 
         result_entries = calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex,\
              th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task)
@@ -220,7 +251,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
             "inp_dir": inp_dir,
             "task": task,
             "thresh": np.nan,
-            "accuracy": clf_report["accuracy"],
+            "clf_report": clf_report,
             "raw_cm": raw_cm,
             "pct_cm": pct_cm 
         }
@@ -244,7 +275,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
             stat_dict = {
                 "task": task,
                 "thresh": th,
-                "accuracy": clf_report["accuracy"],
+                "clf_report": clf_report,
                 "raw_cm": raw_cm,
                 "pct_cm": pct_cm 
             }
@@ -266,6 +297,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     _log.info("task={}".format(task))
 
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
+    model_fn.to(device)
 
     dl = dataloaders[use_split]
 
@@ -276,8 +308,8 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
-    all_deltas = torch.zeros(num_onmfld, dl.dataset.normed_points.shape[1])
-    all_pb_ex = torch.zeros(num_onmfld, dl.dataset.normed_points.shape[1])
+    all_deltas = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
+    all_pb_ex = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
 
     start = end = 0
 
@@ -325,6 +357,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 
         start = end
 
+    model_fn.to('cpu')
     return (
         logits_of_pb_ex,
         all_pb_ex,
@@ -335,8 +368,19 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 @ex.capture
 def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log):
     all_results = list()
+    run_parent_dirs = list()
+    dataloaders = None
     for inp_dir in inp_files:
-        result_container = attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log)    
+        parent_dir = os.path.abspath(os.path.join(inp_dir, os.pardir))
+        if parent_dir not in run_parent_dirs or dataloaders is None:
+            run_config = load_run_config(inp_dir)
+            _log.info("loading data for run from parent directory: {} ...".format(parent_dir))
+            dataloaders = load_data_for_run(parent_dir, run_config)
+            _log.info("data loaded")
+            run_parent_dirs.append(parent_dir)
+        else:
+            _log.info("data was loaded for a previous run")
+        result_container = attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, dataloaders=dataloaders)    
         all_results.extend(result_container)
     return all_results
 
@@ -345,6 +389,8 @@ def main(attack, input_files, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _
 
     inp_files = get_inp_fn()
     all_results = attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log)
+    _log.info("dump dir: {}".format(dump_dir))
+    os.makedirs(dump_dir, exist_ok=True)
     result_fn = os.path.join(dump_dir, _run._id, "all_attack_perfs.json")
     with open(result_fn, "w") as f:
         json.dump(all_results, result_fn)

@@ -22,8 +22,11 @@ def pgd_l2_mfld_clf_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, ve
     """
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
+    losses = None
+    pred_labels = None
     if verbose:
         losses = list()
+        pred_labels = torch.zeros(nb_iter, x.shape[0])
     for t in range(nb_iter):
         # print(t, X.shape, delta.shape, (X+delta).shape)
         logits = model_fn(x + delta)
@@ -35,13 +38,15 @@ def pgd_l2_mfld_clf_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, ve
         loss.backward()
         if verbose:
             losses.append(loss.cpu().detach().item())
+            pred_mfld = torch.max(logits, dim=1)[1]
+            pred_labels[t] = pred_mfld.reshape(-1)
         delta.data += alpha*delta.grad.detach() / norms(delta.grad.detach(), norm)
 
         delta.data = ((x + delta.detach()) * (norms(x, norm) / norms(x + delta.detach(), norm))) - x
         delta.grad.zero_()
     
     if verbose:
-        return ((x + delta).detach(), losses)
+        return (x + delta).detach(), losses, pred_labels
     return (x + delta).detach()
 
 def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, verbose=False):
@@ -53,8 +58,11 @@ def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, v
     """
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
+    losses = None
+    pred_labels = None
     if verbose:
         losses = list()
+        pred_labels = torch.zeros(nb_iter, x.shape[0])
     for t in range(nb_iter):
         # print(t, X.shape, delta.shape, (X+delta).shape)
         logits = model_fn(x + delta)
@@ -63,15 +71,19 @@ def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, v
         # if greedy and not (y_pred == true_labels).all():
         #     # first mis-classificaton detected, so break
         #     break
-        loss = nn.MSELoss()(logits, y)
+        # loss = nn.MSELoss()(logits, y)
+        loss = torch.mean(logits[:, true_labels] - logits[:, (true_labels + 1) % y.shape[1]])
         loss.backward()
+
         if verbose:
             losses.append(loss.cpu().detach().item())
+            pred_mfld = torch.min(logits, dim=1)[1]
+            pred_labels[t] = pred_mfld.reshape(-1)
         delta.data += alpha*delta.grad.detach() / norms(delta.grad.detach())
         delta.data = ((x + delta.detach()) * (norms(x, norm) / norms(x + delta.detach(), norm))) - x
         delta.grad.zero_()
     if verbose:
-        return ((x + delta).detach(), losses)
+        return (x + delta).detach(), losses, pred_labels
     return (x + delta).detach()
 
 def pgd_l2_mfld_eps_attack(model_fn, x, y, loss_func=nn.CrossEntropyLoss(), eps_iter=0.01, nb_iter=1000):
@@ -93,7 +105,7 @@ def pgd_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, norm=2, restarts=
     
     return adv_x
 
-def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=True):
+def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False):
 
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
@@ -136,19 +148,27 @@ def pgd_linf_rand(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, restarts=1)
         
     return (x + max_delta).detach()
 
-def pgd_dist(model_fn, x, y, norm=2, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=True):
+def pgd_dist(model_fn, x, y, norm=2, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False):
     epsilon = eps
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
+
+    losses = None
+    pred_labels = None
     if verbose:
         losses = list()
+        pred_labels = torch.zeros((nb_iter, x.shape[0]))
     labels = torch.min(y, dim=1)[1]
     for t in range(nb_iter):
         # loss = nn.MSELoss()(model(X + delta), y)
         logits = model_fn(x + delta)
+        
         loss = torch.mean(logits[:, labels] - logits[:, (labels + 1) % y.shape[1]])
         loss.backward()
-        losses.append(loss.cpu().detach().item())
+        if verbose:
+            losses.append(loss.cpu().detach().item())
+            pred_mfld = torch.min(logits, dim=1)[1]
+            pred_labels[t] = pred_mfld.reshape(-1)
         # delta.data = torch.min(torch.max(delta.detach(), -X), 1-X) # clip X+delta to [0,1]
         if norm == 2:
             delta.data += alpha*delta.grad.detach() / norms(delta.grad.detach())
@@ -158,7 +178,7 @@ def pgd_dist(model_fn, x, y, norm=2, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=
         delta.grad.zero_()
     
     if verbose:
-        return (x + delta).detach(), losses
+        return (x + delta).detach(), losses, pred_mfld
     
     return (x + delta).detach()
 

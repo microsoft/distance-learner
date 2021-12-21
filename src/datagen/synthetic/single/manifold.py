@@ -477,17 +477,14 @@ class Manifold(ABC):
     def load_splits(cls, dump_dir):
 
         train_dir = os.path.join(dump_dir, "train")
-        os.makedirs(train_dir, exist_ok=True)
         train_set = cls()
         train_set.load_data(train_dir)
 
         val_dir = os.path.join(dump_dir, "val")
-        os.makedirs(val_dir, exist_ok=True)
         val_set = cls()
         val_set.load_data(val_dir)
 
         test_dir = os.path.join(dump_dir, "test")
-        os.makedirs(test_dir, exist_ok=True)
         test_set = cls()
         test_set.load_data(test_dir)
 

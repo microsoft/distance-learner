@@ -27,7 +27,7 @@ def get_inp_fn(proj_dir, settings_to_analyze):
     for data_tag in settings_to_analyze:
         for run in settings_to_analyze[data_tag]:
             inp_files.append(os.path.join(proj_dir, data_tag, run))
-    return inp_files
+    return sorted(inp_files)
 
 
 

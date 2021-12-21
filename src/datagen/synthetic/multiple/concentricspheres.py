@@ -19,7 +19,7 @@ from ..single.sphere import *
 
 class ConcentricSpheres(Dataset):
 
-    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, mu=10,\
+    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
                 sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, **kwargs):
         """
@@ -35,6 +35,10 @@ class ConcentricSpheres(Dataset):
         :type D: float
         :param max_norm: maximum distance upto which points can be generated
         :type max_norm: float
+        :param bp: buffer point for distance
+        :type bp: float
+        :param M: distance value for far-off manifold
+        :type M: float
         :param mu: mean of normal distribution from which we sample
         :type mu: float
         :param sigma: std. dev. of normal distribution from which we sample
@@ -67,6 +71,8 @@ class ConcentricSpheres(Dataset):
         self._k = k
         self._D = D
         self._max_norm = max_norm
+        self._bp = bp
+        self._M = M
         self._mu = mu
         self._sigma = sigma
         self._seed = seed
@@ -98,11 +104,13 @@ class ConcentricSpheres(Dataset):
         self.all_points = None
         self.all_distances = None
         self.all_actual_distances = None
+        self.all_smooth_distances = None
         self.class_labels = None
 
         self.normed_all_points = self.all_points
         self.normed_all_distances = self.all_distances
         self.normed_all_actual_distances = self.all_actual_distances
+        self.normed_all_smooth_distances = self.all_smooth_distances
         self.norm_factor = norm_factor
         self.gamma = gamma
         self.fix_center = None
@@ -121,7 +129,7 @@ class ConcentricSpheres(Dataset):
 
     @num_neg.setter
     def num_neg(self, x):
-        return RuntimeError("cannot set `num_neg` after instantiation")
+        raise RuntimeError("cannot set `num_neg` after instantiation")
 
     @property
     def n(self):
@@ -129,7 +137,7 @@ class ConcentricSpheres(Dataset):
 
     @n.setter
     def n(self, x):
-        return RuntimeError("cannot set `n` after instantiation")
+        raise RuntimeError("cannot set `n` after instantiation")
 
     @property
     def k(self):
@@ -137,7 +145,7 @@ class ConcentricSpheres(Dataset):
 
     @k.setter
     def k(self, x):
-        return RuntimeError("cannot set `k` after instantiation")
+        raise RuntimeError("cannot set `k` after instantiation")
 
     @property
     def D(self):
@@ -145,7 +153,7 @@ class ConcentricSpheres(Dataset):
 
     @D.setter
     def D(self, x):
-        return RuntimeError("cannot set `D` after instantiation")
+        raise RuntimeError("cannot set `D` after instantiation")
 
     @property
     def max_norm(self):
@@ -153,7 +161,23 @@ class ConcentricSpheres(Dataset):
 
     @max_norm.setter
     def max_norm(self, x):
-        return RuntimeError("cannot set `max_norm` after instantiation")
+        raise RuntimeError("cannot set `max_norm` after instantiation")
+
+    @property
+    def bp(self):
+        return self._bp
+
+    @bp.setter
+    def bp(self, x):
+        raise RuntimeError("cannpt set `bp` after instantiation")
+
+    @property
+    def M(self):
+        return self._M
+
+    @M.setter
+    def M(self, x):
+        raise RuntimeError("cannpt set `M` after instantiation")
 
     @property
     def mu(self):
@@ -161,7 +185,7 @@ class ConcentricSpheres(Dataset):
 
     @mu.setter
     def mu(self, x):
-        return RuntimeError("cannot set `mu` after instantiation")
+        raise RuntimeError("cannot set `mu` after instantiation")
 
     @property
     def sigma(self):
@@ -169,7 +193,7 @@ class ConcentricSpheres(Dataset):
 
     @sigma.setter
     def sigma(self, x):
-        return RuntimeError("cannot set `sigma` after instantiation")
+        raise RuntimeError("cannot set `sigma` after instantiation")
 
     @property
     def seed(self):
@@ -177,7 +201,7 @@ class ConcentricSpheres(Dataset):
 
     @seed.setter
     def seed(self, x):
-        return RuntimeError("cannot set `seed` after instantiation")
+        raise RuntimeError("cannot set `seed` after instantiation")
     
     @property
     def rotation(self):
@@ -275,18 +299,23 @@ class ConcentricSpheres(Dataset):
         self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
         self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
-        # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
+        # true distances of points in S1 to S2 and vice versa are not available and marked `M`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
         self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
-        # self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
-        self.all_actual_distances[:self.S1.genattrs.N, 1] = 1
+        self.all_actual_distances[:self.S1.genattrs.N, 1] = self._M
         self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
-        # self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
-        self.all_actual_distances[self.S1.genattrs.N:, 0] = 1
+        self.all_actual_distances[self.S1.genattrs.N:, 0] = self._M
+
+        # smoothed distances of points
+        self.all_smooth_distances = np.copy(self.all_actual_distances)
+        within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
+        self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
+        self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
         self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
+        self.all_smooth_distances = torch.from_numpy(self.all_smooth_distances).float()
         self.class_labels = torch.from_numpy(self.class_labels).long()
 
         if self._normalize:
@@ -329,6 +358,7 @@ class ConcentricSpheres(Dataset):
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
         self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
+        self.normed_all_smooth_distances = self.all_smooth_distances / self.norm_factor
 
         self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
         self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
@@ -346,6 +376,7 @@ class ConcentricSpheres(Dataset):
         self.normed_all_points = self.normed_all_points.float()
         self.normed_all_distances = self.normed_all_distances.float()
         self.normed_all_actual_distances = self.normed_all_actual_distances.float()
+        self.normed_all_smooth_distances = self.normed_all_smooth_distances.float()
     
     def invert_points(self, normed_points):
         unnormed_points = normed_points - self.fix_center + self.anchor
@@ -421,14 +452,17 @@ class ConcentricSpheres(Dataset):
             "num_neg": None,
             "n": n,
             "k": k,
-            "D": 0.2,
-            "max_norm": 0.25,
-            "r": 0.5,
-            "g": 0.5,
+            "D": 0.07,
+            "max_norm": 0.10,
+            "bp": 0.09,
+            "M": 1.0,
+            "r": 1.0,
+            "g": 0.3,
             "mu": 0,
             "sigma": 1,
             "seed": 42,
             "gamma": 0.5,
+            "norm_factor": 1.0
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)
@@ -523,9 +557,11 @@ class ConcentricSpheres(Dataset):
             "points": self.all_points[idx],
             "distances": self.all_distances[idx],
             "actual_distances": self.all_actual_distances[idx],
+            "smooth_distances": self.all_smooth_distances[idx],
             "normed_points": self.normed_all_points[idx],
             "normed_distances": self.normed_all_distances[idx],
             "normed_actual_distances": self.normed_all_actual_distances[idx],
+            "normed_smooth_distances": self.normed_all_smooth_distances[idx],
             "classes": self.class_labels[idx]
         }
 
