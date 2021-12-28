@@ -553,17 +553,22 @@ class ConcentricSpheres(Dataset):
         return self.all_points.shape[0]
 
     def __getitem__(self, idx):
-        return {
+        batch = {
             "points": self.all_points[idx],
             "distances": self.all_distances[idx],
             "actual_distances": self.all_actual_distances[idx],
-            "smooth_distances": self.all_smooth_distances[idx],
             "normed_points": self.normed_all_points[idx],
             "normed_distances": self.normed_all_distances[idx],
             "normed_actual_distances": self.normed_all_actual_distances[idx],
-            "normed_smooth_distances": self.normed_all_smooth_distances[idx],
             "classes": self.class_labels[idx]
         }
+
+        if self.all_smooth_distances is not None:
+            batch["smooth_distances"] = self.all_smooth_distances[idx]
+        if self.normed_all_smooth_distances is not None:
+            batch["normed_smooth_distances"] = self.normed_all_smooth_distances[idx]
+
+        return batch
 
     
         

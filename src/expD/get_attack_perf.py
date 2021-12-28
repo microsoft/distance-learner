@@ -152,7 +152,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     _log.info("loading config for run...")
     run_config = load_run_config(run_dir=run_dir)
     _log.info("config loaded")
-    _log.info("is data loaded: {}".format(dataloaders is None))
+    _log.info("is data loaded: {}".format(not (dataloaders is None)))
     if dataloaders is None:
         _log.info("loading data for run from parent directory: {} ...".format(run_parent_dir))
         dataloaders = load_data_for_run(run_parent_dir=run_parent_dir, run_config=run_config)
@@ -162,6 +162,9 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
     task = "dist" if run_config["task"] == "regression" else "clf"
     _log.info("task: {}".format(task))
+    _log.info("ftname: {}".format(run_config["ftname"]))
+    _log.info("ftname: {}".format(run_config["tgtname"]))
+
 
     dataset = dataloaders[use_split].dataset
     data_param_dict = {
@@ -180,6 +183,8 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         if i < len(attack_param_names) - 1:
             result_tag += ","
 
+    result_tag += ",task={}".format(task)
+
     for comb in product(*attack_param_vals):
 
         attack_param_dict = {attack_param_names[i]: comb[i] for i in range(len(attack_param_names))}
@@ -190,6 +195,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         nb_iter = attack_param_dict["nb_iter"]
         norm = attack_param_dict["norm"]
         verbose = attack_param_dict["verbose"]
+        restarts = attack_param_dict["restarts"]
 
         attack_fn, atk_routine = get_atk(atk_flavor, task, atk_routine)
         # so that if input atk_routine is unavailable, the one used is captured
@@ -197,11 +203,12 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
         result_parent_dir = os.path.join(run_dir, "attack_perf")
         _log.info(result_tag)
-        result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, task, atk_routine, eps, eps_iter, nb_iter, norm, verbose)
+        result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, atk_routine, eps, eps_iter, nb_iter, norm, restarts, verbose)
         _log.info("perturbed ex will be dumped in: {}".format(result_dir))
 
         logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex = attack_model(dataloaders=dataloaders,\
-            model_fn=model_fn, attack_fn=attack_fn, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter, norm=norm, verbose=verbose)
+            model_fn=model_fn, attack_fn=attack_fn, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
+            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"])
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
         if not debug:
@@ -212,22 +219,34 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
                 "logits_of_raw_ex": logits_of_raw_ex
             }, out_fn)
 
-        result_entries = calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex,\
-             th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task)
+        result_entries, min_dist_to_pb_raw_vals, min_dist_to_pb_raw_idx = calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex,\
+             th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, run_config["ftname"], run_config["tgtname"])
         result_container.extend(result_entries)
+
+        if not debug:
+            out_fn = os.path.join(result_dir, "min_dist_to_pb_raw.pt")
+            torch.save({
+                "values": min_dist_to_pb_raw_vals,
+                "indices": min_dist_to_pb_raw_idx
+            }, out_fn)
 
     return result_container
     
 @ex.capture
-def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex, th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task):
+def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex, th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, ftname, tgtname):
 
     results = list()
 
-    onmfld_pts = dataset[dataset.class_labels != OFF_MFLD_LABEL]
-    pair_dist_pb_to_raw = torch.cdist(all_pb_ex, onmfld_pts)
-    min_dist_pb_to_raw = torch.min(pair_dist_pb_to_raw, dim=1)
-    min_dist_pb_to_raw_val = min_dist_pb_to_raw.values
-    min_dist_pb_to_raw_idx = min_dist_pb_to_raw.indices
+    onmfld_pts = dataset.normed_all_points[dataset.class_labels != OFF_MFLD_LABEL]
+
+    def get_closest_onmfld_pt(onmfld_pts, all_pb_ex):
+        pair_dist_pb_to_raw = torch.cdist(all_pb_ex, onmfld_pts)
+        min_dist_pb_to_raw = torch.min(pair_dist_pb_to_raw, dim=1)
+        min_dist_pb_to_raw_vals = min_dist_pb_to_raw.values
+        min_dist_pb_to_raw_idx = min_dist_pb_to_raw.indices
+        return min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx
+
+    min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx = get_closest_onmfld_pt(onmfld_pts, all_pb_ex)
 
     if task != "dist":
         true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
@@ -250,6 +269,8 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
         stat_dict = {
             "inp_dir": inp_dir,
             "task": task,
+            "ftname": ftname,
+            "tgtname": tgtname,
             "thresh": np.nan,
             "clf_report": clf_report,
             "raw_cm": raw_cm,
@@ -260,11 +281,13 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
 
     else:
 
+
         for th in th_analyze:
             
             adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
-            adv_true_classes[min_dist_pb_to_raw_val > th] = OFF_MFLD_LABEL
+            adv_true_classes[min_dist_pb_to_raw_vals > th] = OFF_MFLD_LABEL
             pred_classes = torch.min(logits_of_raw_ex, dim=1)[1]
+            pred_classes[torch.min(logits_of_raw_ex, dim=1)[0] > th] = OFF_MFLD_LABEL
 
             clf_report = classification_report(adv_true_classes, pred_classes, output_dict=True)
             raw_cm = make_general_cm(adv_true_classes, pred_classes, output_dict=False)
@@ -274,6 +297,8 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
             result_entry.update(**data_param_dict)
             stat_dict = {
                 "task": task,
+                "ftname": ftname,
+                "tgtname": tgtname,
                 "thresh": th,
                 "clf_report": clf_report,
                 "raw_cm": raw_cm,
@@ -282,11 +307,11 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
             result_entry.update(**stat_dict)
             results.append(result_entry)
     
-    return results
+    return results, min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx
 
 
 @ex.capture
-def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, eps, eps_iter, nb_iter, norm, verbose, task):
+def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname):
 
     _log.info("logging attack parameters")
     _log.info("eps={}".format(eps))
@@ -315,14 +340,14 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 
     for (i, batch) in tqdm(enumerate(dl)):
 
-        inputs = batch["normed_points"]
-        true_distances = batch["normed_actual_distances"]
+        inputs = batch[ftname]
+        targets = batch[tgtname]
         true_classes = batch["classes"]
 
         # experiment was performed on points 'exactly' on the manifold.
         # in our dataset, these points are those with class labels != 2
         inputs = inputs[true_classes != OFF_MFLD_LABEL]
-        true_distances = true_distances[true_classes != OFF_MFLD_LABEL]
+        targets = targets[true_classes != OFF_MFLD_LABEL]
         true_classes = true_classes[true_classes != OFF_MFLD_LABEL]
         end = start + inputs.shape[0]
 
@@ -330,17 +355,15 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
             continue
         
         inputs = inputs.to(device)
-        true_distances = true_distances.to(device)
+        targets = targets.to(device)
         true_classes = true_classes.to(device)
 
-        y = true_classes
-        if task == "dist":
-            y = true_distances
-
         x = inputs
+        y = targets
 
         adv_x = attack_fn(model_fn=model_fn, x=x, y=y,\
-             eps=eps, eps_iter=eps_iter, nb_iter=nb_iter, verbose=verbose, norm=norm)
+             eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
+             verbose=verbose, norm=norm, restarts=restarts)
         delta = adv_x - x
         
         all_deltas[start:end] = delta
@@ -385,7 +408,7 @@ def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _lo
     return all_results
 
 @ex.automain
-def main(attack, input_files, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log, _run):
+def main(attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log, _run):
 
     inp_files = get_inp_fn()
     all_results = attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log)

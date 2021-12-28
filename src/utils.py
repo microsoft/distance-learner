@@ -31,23 +31,25 @@ def make_general_cm(true_labels, pred_labels, pct=False, output_dict=False):
     :param output_dict: return output as a dict
     :type output_dict: bool
     """
-    uniq_true_labels = np.unique(true_labels)
-    uniq_pred_labels = np.unique(pred_labels)
+    uniq_true_labels = np.unique(true_labels).astype(np.int64)
+    uniq_pred_labels = np.unique(pred_labels).astype(np.int64)
 
-    cmatrix = np.zeros(uniq_true_labels.shape[0], uniq_pred_labels.shape[0])
+    cmatrix = np.zeros((uniq_true_labels.shape[0], uniq_pred_labels.shape[0]))
     cm = dict()
-    for tlab in uniq_true_labels:
-        tidx = np.where(true_labels == tlab)[0]
+    for tlab_idx in range(uniq_true_labels.shape[0]):
+        tlab = uniq_true_labels[tlab_idx]
+        tidx = true_labels == tlab
         if tlab not in cm:
             cm[tlab] = dict()
-        for plab in uniq_pred_labels:
-            pidx = np.where(pred_labels[tidx] == plab)[0]
+        for plab_idx in range(uniq_pred_labels.shape[0]):
+            plab = uniq_pred_labels[plab_idx]
+            pidx = pred_labels[tidx] == plab
             if plab not in cm[tlab]:
-                cm[tlab][plab] = pidx.shape[0]
-                cmatrix[tlab, plab] = pidx.shape[0]
+                cm[tlab][plab] = sum(pidx).float().item()
+                cmatrix[tlab_idx, plab_idx] = sum(pidx).float().item()
                 if pct:
                     cm[tlab][plab]/=tidx.shape[0]
-                    cmatrix[tlab][plab]/=tidx.shape[0]
+                    cmatrix[tlab_idx][plab_idx]/=tidx.shape[0]
     if output_dict:
         return cm
     return cmatrix

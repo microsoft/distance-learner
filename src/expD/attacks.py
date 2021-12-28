@@ -15,7 +15,7 @@ def norms(Z, ord=2):
     return Z.norm(p=ord, dim=1).reshape(-1, 1)
 
 
-def pgd_l2_mfld_clf_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, verbose=False):
+def pgd_l2_mfld_clf_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, verbose=False, **kwargs):
     """
     On-manifold adversarial attack for standard classifier.
     As described in: https://arxiv.org/pdf/1801.02774.pdf
@@ -49,7 +49,7 @@ def pgd_l2_mfld_clf_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, ve
         return (x + delta).detach(), losses, pred_labels
     return (x + delta).detach()
 
-def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, verbose=False):
+def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, verbose=False, **kwargs):
     """
     on-manifold PGD attack
 
@@ -86,7 +86,7 @@ def pgd_l2_mfld_dist_attack(model_fn, x, y, eps_iter=0.01, nb_iter=40, norm=2, v
         return (x + delta).detach(), losses, pred_labels
     return (x + delta).detach()
 
-def pgd_l2_mfld_eps_attack(model_fn, x, y, loss_func=nn.CrossEntropyLoss(), eps_iter=0.01, nb_iter=1000):
+def pgd_l2_mfld_eps_attack(model_fn, x, y, loss_func=nn.CrossEntropyLoss(), eps_iter=0.01, nb_iter=1000, **kwargs):
     """
     on-manifold attack that also restricts the perturbation within an epsilon ball of the original sample
 
@@ -95,7 +95,7 @@ def pgd_l2_mfld_eps_attack(model_fn, x, y, loss_func=nn.CrossEntropyLoss(), eps_
     """
     pass
 
-def pgd_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, norm=2, restarts=1):
+def pgd_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, norm=2, restarts=1, **kwargs):
 
     if norm == 2:
         # note: std. l2 pgd attack does not have random restarts enabled right now
@@ -105,7 +105,7 @@ def pgd_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, norm=2, restarts=
     
     return adv_x
 
-def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False):
+def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False, **kwargs):
 
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
@@ -124,7 +124,7 @@ def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False)
         return (x + delta).detach(), losses
     return (x + delta).detach()
 
-def pgd_linf_rand(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, restarts=1):
+def pgd_linf_rand(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, restarts=1, **kwargs):
     """ Construct PGD adversarial examples on the samples X, with random restarts"""
     
     epsilon = eps
@@ -148,7 +148,7 @@ def pgd_linf_rand(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, restarts=1)
         
     return (x + max_delta).detach()
 
-def pgd_dist(model_fn, x, y, norm=2, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False):
+def pgd_dist(model_fn, x, y, norm=2, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False, **kwargs):
     epsilon = eps
     alpha = eps_iter
     delta = torch.zeros_like(x, requires_grad=True)
