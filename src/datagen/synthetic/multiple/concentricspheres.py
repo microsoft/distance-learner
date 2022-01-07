@@ -349,9 +349,9 @@ class ConcentricSpheres(Dataset):
     def norm(self):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
         if self.norm_factor is None:
-            min_coord = torch.min(self.all_points).item()
-            max_coord = torch.max(self.all_points).item()
-            self.norm_factor = max_coord - min_coord
+            # min_coord = torch.min(self.all_points).item()
+            # max_coord = torch.max(self.all_points).item()
+            self.norm_factor = 2 * (self.r + self.g + self.max_norm)
         
         self._anchor = self._x_cn / self.norm_factor
         

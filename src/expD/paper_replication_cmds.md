@@ -355,3 +355,81 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=300 cooldown=299 lr=1e-5 d
  data.generate=True \
  task=regression
  ```
+
+
+ ```bash
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse\
+ data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
+ data.mtype=conc-spheres \
+ data.data_tag=rdm_concspheres_notppr_k3n500_noninfsmoothdist \
+ data.data_params.train.N=1000000 \
+ data.data_params.train.k=3 \
+ data.data_params.train.n=500 \
+ data.data_params.train.r=80 \
+ data.data_params.train.g=40 \
+ data.data_params.train.max_norm=15 \
+ data.data_params.train.bp=10 \
+ data.data_params.train.M=150 \
+ data.data_params.train.D=10 \
+ data.data_params.val.k=3 \
+ data.data_params.val.n=500 \
+ data.data_params.val.r=80 \
+ data.data_params.val.g=40 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.max_norm=15 \
+ data.data_params.val.bp=10 \
+ data.data_params.val.M=150 \
+ data.data_params.val.D=10 \
+ data.data_params.test.k=2 \
+ data.data_params.test.n=500 \
+ data.data_params.test.r=80 \
+ data.data_params.test.g=40 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.max_norm=15 \
+ data.data_params.test.bp=10 \
+ data.data_params.test.M=150 \
+ data.data_params.test.D=10 \
+ model.input_size=500 \
+ data.generate=True \
+ task=regression
+```
+
+```bash
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse\
+ data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
+ data.mtype=conc-spheres \
+ data.data_tag=rdm_concspheres_k500n500_noninfsmoothdist_highbp_upmn \
+ data.data_params.train.N=1000000 \
+ data.data_params.train.k=500 \
+ data.data_params.train.n=500 \
+ data.data_params.train.r=1 \
+ data.data_params.train.g=0.3 \
+ data.data_params.train.max_norm=0.14 \
+ data.data_params.train.bp=0.1 \
+ data.data_params.train.M=1.0 \
+ data.data_params.train.D=0.07 \
+ data.data_params.train.norm_factor=1 \
+ data.data_params.val.k=500 \
+ data.data_params.val.n=500 \
+ data.data_params.val.r=1 \
+ data.data_params.val.g=0.3 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.max_norm=0.14 \
+ data.data_params.val.bp=0.1 \
+ data.data_params.val.M=1.0 \
+ data.data_params.val.D=0.07 \
+ data.data_params.val.norm_factor=1 \
+ data.data_params.test.k=500 \
+ data.data_params.test.n=500 \
+ data.data_params.test.r=1 \
+ data.data_params.test.g=0.3 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.max_norm=0.14 \
+ data.data_params.test.bp=0.1 \
+ data.data_params.test.M=1.0 \
+ data.data_params.test.D=0.07 \
+ data.data_params.test.norm_factor=1 \
+ model.input_size=500 \
+ data.generate=True \
+ task=regression
+```

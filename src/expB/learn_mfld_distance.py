@@ -193,14 +193,15 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     elif hasattr(dataloaders["train"].dataset, "all_distances"):
         
         for phase in ["train", "val"]:
-            writer.add_histogram(phase + "/S1/distances", dataloaders[phase].dataset.all_distances[:, 0])
-            writer.add_histogram(phase + "/S2/distances", dataloaders[phase].dataset.all_distances[:, 1])
 
             writer.add_histogram(phase + "/S1/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 0])
             writer.add_histogram(phase + "/S2/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 1])
 
             writer.add_histogram(phase + "/S1/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 0])
             writer.add_histogram(phase + "/S2/normed_distances", dataloaders[phase].dataset.normed_all_distances[:, 1])
+
+            writer.add_histogram(phase + "/S1/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 0])
+            writer.add_histogram(phase + "/S2/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 1])
 
             writer.add_histogram(phase + "/S1/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 0])
             writer.add_histogram(phase + "/S2/normed_actual_distances", dataloaders[phase].dataset.normed_all_actual_distances[:, 1])
@@ -259,8 +260,6 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             "val_loss": 0,
             "lr": start_lr
         }
-        
-        
 
         for phase in ["train", "val"]:
             
@@ -332,8 +331,6 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                     loss.backward()
                     optimizer.step()
 
-
-                
                 logs[prefix + "loss"] += loss.detach().cpu().item()
 
                 if phase == "train":
@@ -393,6 +390,22 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 for idx in range(all_logits.shape[1]):
                     writer.add_histogram(phase + "/S" + str(idx+1) + "/logits", all_logits[:, idx].reshape(-1), epoch)
             
+            for idx in range(all_logits.shape[1]):
+                mask = np.abs(all_targets.numpy()[:, idx] - all_logits.numpy()[:, idx]) >= 5e-2
+                plt.scatter(all_targets.numpy()[mask, idx], all_logits.numpy()[mask, idx], s=0.01, c="red")
+                plt.scatter(all_targets.numpy()[np.logical_not(mask), idx], all_logits.numpy()[np.logical_not(mask), idx], s=0.01, c="green")
+                plt.xlabel("gt distance ({})".format(target_name))
+                plt.ylabel("pred distance")
+                plt.title("gt vs. pred {}".format(target_name))
+                plt.savefig(save_dir, "pred_vs_gt_dists_S{}_{}.png".format(idx + 1, phase))
+
+            mask = np.abs(all_targets.numpy().ravel() - all_logits.numpy().ravel()) >= 5e-2
+            plt.scatter(all_targets.numpy().ravel()[mask], all_logits.numpy().ravel()[mask], s=0.01, c="red")
+            plt.scatter(all_targets.numpy().ravel()[np.logical_not(mask)], all_logits.numpy().ravel()[np.logical_not(mask)], s=0.01, c="green")
+            plt.xlabel("gt distance ({})".format(target_name))
+            plt.ylabel("pred distance")
+            plt.title("gt vs. pred {}".format(target_name))
+            plt.savefig(save_dir, "pred_vs_gt_dists_all_{}.png".format(phase))
         
         check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss or epoch == 100
         stat = "val_loss"
@@ -427,8 +440,6 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
         logs["lr"] = optimizer.param_groups[0]["lr"]
 
         writer.add_scalar("lr", logs["lr"], epoch)
-
-
 
         # liveloss.update(logs)
         # liveloss.draw()
