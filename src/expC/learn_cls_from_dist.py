@@ -13,6 +13,7 @@ import time
 import copy
 import random
 import argparse
+import subprocess
 
 from collections import OrderedDict
 
@@ -187,6 +188,8 @@ def config(data, model):
 
     logdir = data["logdir"] # directory to store run dumps and input data
     run_dump_dir = os.path.join(logdir, name)
+
+    backup_dir = data["backup_dir"] # directory on HDD/remote server where you want to keep backup in background
 
     ex.observers.append(FileStorageObserver(run_dump_dir))
 
@@ -475,7 +478,7 @@ def run_eval(data, model, dataloaders, datasets, cuda, task, ftname, tgtname, in
 
 
 @ex.automain
-def main(train, logdir, data, name, _log, _run):
+def main(train, logdir, data, name, _log, _run, backup_dir):
 
     model = None
     optimizer = None
@@ -503,9 +506,14 @@ def main(train, logdir, data, name, _log, _run):
         logits_and_targets = run_eval(model=model, datasets=datasets, dataloaders=dataloaders, save_dir=save_dir, plotdir=plot_dir)
 
     
+    if backup_dir is not None:
+        bkup_cmd = "rsync -avzr {src} {dest}".format(logdir, backup_dir)
+        bkup_cmd_list = bkup_cmd.split()
+        sync_sanity_check_file = os.path.join(save_dir, "rsync_bkup_sanity_check_cout.txt")
 
+        with open(sync_sanity_check_file, "w") as f:
+            subprocess.Popen(bkup_cmd_list, stdout=sync_sanity_check_file)
 
-    
 
 # if __name__ == '__main__':
 #     # lmd.init()
