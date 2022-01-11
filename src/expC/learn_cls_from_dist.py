@@ -507,7 +507,7 @@ def main(train, logdir, data, name, _log, _run, backup_dir):
 
     
     if backup_dir is not None:
-        bkup_cmd = "rsync -avzr {src} {dest}".format(logdir, backup_dir)
+        bkup_cmd = "rsync -avzr {src} {dest}".format(src=logdir, dest=backup_dir)
         bkup_cmd_list = bkup_cmd.split()
         sync_sanity_check_file = os.path.join(save_dir, "rsync_bkup_sanity_check_cout.txt")
 
