@@ -265,10 +265,11 @@ class ConcentricSpheres(Dataset):
         tot_count_per_mfld = self._N // 2
         neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None else None
 
+        s_gamma = 0.5 if self._gamma is 0 else self._gamma # gamma = 0 needed for concentric spheres but throws error with constituent spheres
         self.S1 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
-            normalize=True, norm_factor=None, gamma=self._gamma, anchor=None)
+            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None)
 
         self.S1.compute_points()
         print("[ConcentricSpheres]: Generated S1")
@@ -277,7 +278,7 @@ class ConcentricSpheres(Dataset):
         self.S2 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r + self._g, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
-            normalize=True, norm_factor=None, gamma=self._gamma, anchor=None)
+            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None)
 
         self.S2.compute_points()
         assert (self._x_cn == self.S2.specattrs.x_cn).all() == True
@@ -349,9 +350,11 @@ class ConcentricSpheres(Dataset):
     def norm(self):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
         if self.norm_factor is None:
+            self.norm_factor = max(
+                [torch.max(self.all_points[:, i]) - torch.min(self.all_points[:, i]) for i in range(self.n)]
+            )
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
-            self.norm_factor = 2 * (self.r + self.g + self.max_norm)
         
         self._anchor = self._x_cn / self.norm_factor
         
