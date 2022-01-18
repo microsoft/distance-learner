@@ -171,6 +171,9 @@ def config(data, model):
     num_mflds = 2 # number of manifolds
     num_classes = num_mflds if (train_on_onmfld and task == "clf") or (task == "regression") else num_mflds + 1 # useful for stdclf only
     input_size = data["data_params"]["train"]["n"] # dimension in which manifold is embedded
+    online = data["data_params"]["train"]["online"]
+    off_online = data["data_params"]["train"]["off_online"]
+    augment = data["data_params"]["train"]["augment"]
 
     loss_func = "masked_mse" # ["std_mse", "masked_mse", "weighted_mse", "cross_entropy"]
     if task == "clf":
@@ -193,6 +196,17 @@ def config(data, model):
 
     ex.observers.append(FileStorageObserver(run_dump_dir))
 
+
+def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, train):
+    shuffle = True if train else False
+
+    dataloaders = {
+        "train": DataLoader(dataset=train_set, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers),
+        "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
+        "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+    }
+
+    return dataloaders
 
 
 @ex.capture
@@ -241,14 +255,14 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                     else:
                         dataset.class_labels[i] = OFF_MFLD_LABEL
 
+    dataloaders = make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, train)
+    # shuffle = True if train else False
 
-    shuffle = True if train else False
-
-    dataloaders = {
-        "train": DataLoader(dataset=train_set, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers),
-        "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
-        "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
-    }
+    # dataloaders = {
+    #     "train": DataLoader(dataset=train_set, shuffle=shuffle, batch_size=batch_size, num_workers=num_workers),
+    #     "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
+    #     "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+    # }
 
     datasets = {
         "train": train_set,
@@ -259,7 +273,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
 
 @ex.capture
 def run_training(num_epochs, task, loss_func, lr, warmup,\
-     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log):
+     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log, online):
 
 
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
@@ -281,7 +295,8 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
     
     model, optimizer, scheduler, _, _ = lmd.train(model, optimizer, loss_function,\
         dataloaders, device, save_dir, scheduler, feature_name=ftname, target_name=tgtname,\
-        num_epochs=num_epochs, task=task, name=name, scheduler_params=scheduler_params, specs_dict=None, debug=debug)
+        num_epochs=num_epochs, task=task, name=name, scheduler_params=scheduler_params, \
+        specs_dict=None, debug=debug, online=online)
 
     return model, optimizer, scheduler, datasets, dataloaders
 
@@ -514,7 +529,7 @@ def main(train, logdir, data, name, _log, _run, backup_dir):
         sync_sanity_check_file = os.path.join(save_dir, "rsync_bkup_sanity_check_cout.txt")
 
         with open(sync_sanity_check_file, "w") as f:
-            subprocess.Popen(bkup_cmd_list, stdout=sync_sanity_check_file)
+            subprocess.Popen(bkup_cmd_list, stdout=f)
 
 
 # if __name__ == '__main__':

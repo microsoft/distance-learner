@@ -21,7 +21,8 @@ class ConcentricSpheres(Dataset):
 
     def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
                 sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
-                normalize=True, norm_factor=None, gamma=0.5, anchor=None, **kwargs):
+                normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
+                off_online=False, augment=False, **kwargs):
         """
         :param N: number of samples in the dataset
         :type N: int
@@ -63,6 +64,12 @@ class ConcentricSpheres(Dataset):
         :type gamma: float
         :param anchor: anchor point used in normalization
         :type anchor: numpy.array
+        :param online: whether to sample points on-the-fly
+        :type online: bool
+        :param off_online: whether only off-manifold samples should be sampled on-the-fly
+        :type off_online: bool
+        :param augment: whether to treat off-manifold points generated on-the-fly as augmentations
+        :type augment: bool
         """
     
         self._N = N
@@ -78,6 +85,9 @@ class ConcentricSpheres(Dataset):
         self._seed = seed
         self._r = r
         self._g = g
+        self._online = online
+        self._off_online = off_online
+        self._augment = augment
         self._x_ck = x_ck
         if self._x_ck is None:
             self._x_ck = np.random.normal(self._mu, self._sigma, self._k)
@@ -259,17 +269,41 @@ class ConcentricSpheres(Dataset):
     def anchor(self, anchor):
         raise RuntimeError("cannot set `anchor` after instantiation!")
 
+    @property
+    def online(self):
+        return self._online
+
+    @online.setter
+    def online(self, online):
+        raise RuntimeError("cannot set `online` after instantiation!")
+    
+    @property
+    def off_online(self):
+        return self._off_online
+
+    @off_online.setter
+    def off_online(self, off_online):
+        raise RuntimeError("cannot set `off_online` after instantiation!")
+
+    @property
+    def augment(self):
+        return self._augment
+
+    @augment.setter
+    def augment(self, augment):
+        raise RuntimeError("cannot set `augment` after instantiation!")
 
     def compute_points(self):
 
         tot_count_per_mfld = self._N // 2
-        neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None else None
+        neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None and not self.online else None
 
         s_gamma = 0.5 if self._gamma is 0 else self._gamma # gamma = 0 needed for concentric spheres but throws error with constituent spheres
         self.S1 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
-            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None)
+            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
+            off_online=self._off_online, augment=self._augment)
 
         self.S1.compute_points()
         print("[ConcentricSpheres]: Generated S1")
@@ -278,7 +312,8 @@ class ConcentricSpheres(Dataset):
         self.S2 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r + self._g, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
-            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None)
+            normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
+            off_online=self._off_online, augment=self._augment)
 
         self.S2.compute_points()
         assert (self._x_cn == self.S2.specattrs.x_cn).all() == True

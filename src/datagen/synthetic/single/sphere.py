@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from optparse import OptionConflictError
 import os
 import sys
 import copy
@@ -109,7 +110,8 @@ class RandomSphere(Manifold, Dataset):
     def __init__(self, genattrs=None, specattrs=None, N=1000, num_neg=None,\
                  n=100, k=3, r=10.0, D=50.0, max_norm=2.0, mu=10, sigma=5, seed=42,\
                  x_ck=None, rotation=None, translation=None, normalize=True,\
-                 norm_factor=None, gamma=0.5, anchor=None):
+                 norm_factor=None, gamma=0.5, anchor=None, online=False,\
+                 off_online=False, augment=False):
         """constructor for class containing a random sphere"""
 
         self._genattrs = genattrs
@@ -119,7 +121,8 @@ class RandomSphere(Manifold, Dataset):
             self._genattrs = GeneralManifoldAttrs(N=N, num_neg=num_neg,\
                  n=n, k=k, D=D, max_norm=max_norm, mu=mu, sigma=sigma,\
                  seed=seed, normalize=normalize, norm_factor=norm_factor,\
-                 gamma=gamma, rotation=rotation, translation=translation, anchor=anchor)
+                 gamma=gamma, rotation=rotation, translation=translation,\
+                 anchor=anchor, online=online, off_online=off_online, augment=augment)
 
         if not isinstance(specattrs, SpecificSphereAttrs):
             self._specattrs = SpecificSphereAttrs(mu=self._genattrs.mu,\
@@ -164,11 +167,92 @@ class RandomSphere(Manifold, Dataset):
         raise RuntimeError("Cannot set `specattrs` after instantiation!")
 
     def __len__(self):
+        if self._genattrs.online:
+            return self._genattrs.N
         return self._genattrs.points_n.shape[0]
+
+    def online_gen_pre_images(self, batch_pts):
+        """generate points/pre-images"""
+        batch_pre_images = batch_pts # if `augment` is enabled, then re-use batch points as pre-images
+        
+        # when `augment` is not enabled, generate pre-images from scratch
+        if not self._genattrs.augment:
+            batch_pre_images = np.random.normal(batch_pts.shape[0], self.genattrs.k)
+            norm_batch_pre_images = np.linalg.norm(batch_pre_images, axis=1, ord=2).reshape(-1, 1)
+            batch_pre_images = batch_pre_images / norm_batch_pre_images
+            batch_pre_images = self.specattrs.r * batch_pre_images
+            batch_pre_images = batch_pre_images + self.specattrs.x_ck
+        return batch_pre_images
+
+    def online_compute_normals(self, batch_pre_images):
+        
+        # normal_vectors_to_mfld_at_p are actually centred at x_ck, but 
+        # we can imagine the same vector at $p$, and later adjust the coordinates
+        # by adding the position vector of $p$ back.
+        #
+        # Also note that these negative examples are being generated using the pre-images
+        # that we generated and stored in self._genattrs.pre_images_k
+        batch_normal_vectors_to_mfld_at_p = batch_pre_images - self._specattrs.x_ck
+        batch_embedded_normal_vectors_to_mfld_at_p = np.zeros((batch_pre_images.shape[0], self._genattrs.n))
+        batch_embedded_normal_vectors_to_mfld_at_p[:, :self._genattrs.k] = batch_normal_vectors_to_mfld_at_p
+
+        return batch_embedded_normal_vectors_to_mfld_at_p
+
+    def online_make_off_mfld_eg(self, online_batch):
+        return super().online_make_off_mfld_eg(online_batch)
+
+    def online_embed_in_n(self, batch_pts, batch_pre_images):
+        batch_num_neg = batch_pre_images.shape[0]
+        batch_N = batch_pre_images.shape[0] + batch_pts.shape[0]
+        
+        online_neg_examples, online_neg_distances = self.online_make_off_mfld_eg(batch_pre_images)
+
+        online_points_n_trivial_ = np.zeros((batch_N, self._genattrs.n))
+        online_points_n_trivial_[:batch_num_neg] = online_neg_examples
+        online_points_n_trivial_[batch_num_neg:batch_N] = batch_pts
+
+        online_points_n_tr_ = online_points_n_trivial_ + self._genattrs.translation
+        online_points_n_rot_ = np.dot(self._genattrs.rotation, online_points_n_tr_.T).T
+
+        online_points_n = online_points_n_rot_
+
+        online_actual_distances = np.zeros((batch_N, 1))
+        online_actual_distances[:batch_num_neg] = online_neg_distances
+        online_actual_distances[batch_num_neg:] = np.linalg.norm(online_points_n[batch_num_neg:] - self._specattrs.x_cn, axis=1, ord=2).reshape(-1, 1) - self._specattrs.r
+
+        online_distances = np.clip(online_actual_distances, a_min=0, a_max=self._genattrs.D)
+
+        return {
+            "points_n": online_points_n,
+            "distances": online_distances,
+            "actual_distances": online_actual_distances,
+        }
+
+    def online_norm(self, online_points_n, online_distances, online_actual_distances):
+        """normalise points and distances so that the whole setup lies in a unit sphere"""
+
+        online_normed_points_n = online_points_n / self._genattrs.norm_factor
+        online_normed_distances = online_distances / self._genattrs.norm_factor
+        online_normed_actual_distances = online_actual_distances / self._genattrs.norm_factor
+
+        # change centre to bring it closer to origin (smaller numbers are easier to learn)
+        online_normed_points_n = online_normed_points_n - self._genattrs.anchor + self._genattrs.fix_center
+
+        online_normed_points_n = online_normed_points_n.float()
+        online_normed_distances = online_normed_distances.float()
+        online_normed_actual_distances = online_normed_actual_distances.float()
+
+        return {
+            "normed_points_n": online_normed_points_n,
+            "normed_distances": online_normed_distances,
+            "normed_actual_distances": online_normed_actual_distances
+        }        
+
 
     def __getitem__(self, idx):
         # return self._genattrs.points_n[idx], self._genattrs.distances[idx]
-        return {
+        batch = {
+            "points_k": self._genattrs.points_k[idx],
             "points_n": self._genattrs.points_n[idx],
             "distances": self._genattrs.distances[idx],
             "actual_distances": self._genattrs.actual_distances[idx],
@@ -176,6 +260,11 @@ class RandomSphere(Manifold, Dataset):
             "normed_distances": self._genattrs.normed_distances[idx],
             "normed_actual_distances": self._genattrs.normed_actual_distances[idx]
         }
+
+        if self._genattrs.online:
+            batch = self.online_compute_points(batch)
+        
+        return batch
 
     def gen_center(self):
         """generate a center in lower dimension"""
@@ -190,7 +279,14 @@ class RandomSphere(Manifold, Dataset):
         
             reference: https://en.wikipedia.org/wiki/N-sphere#Uniformly_at_random_on_the_(n_%E2%88%92_1)-sphere 
         """
-        points_k = np.random.normal(size=(self._genattrs.N - self._genattrs.num_neg, self._genattrs.k))
+
+        num_onmfld_samples = self._genattrs.N - self._genattrs.num_neg
+        if self._genattrs.online:
+            # in case of online sampling, `num_neg` means something
+            # different and `N` denotes total on manifold samples
+            num_onmfld_samples = self._genattrs.N
+
+        points_k = np.random.normal(size=(num_onmfld_samples, self._genattrs.k))
         
         norms = np.linalg.norm(points_k, axis=1, ord=2).reshape(-1, 1)
         points_k = (points_k / norms)
@@ -246,6 +342,8 @@ class RandomSphere(Manifold, Dataset):
         
         """embedding center and sampled points in `self._genattrs.n`-dims"""
         
+        num_neg = self._genattrs.num_neg if not self._genattres.online else -1
+
         # embedding the center
         self._specattrs.x_cn_trivial_ = np.zeros(self._genattrs.n)
         self._specattrs.x_cn_trivial_[:self._genattrs.k] = self._specattrs.x_ck
@@ -255,13 +353,15 @@ class RandomSphere(Manifold, Dataset):
         
         
         # generate the negative examples
-        neg_examples, neg_distances = self.make_off_mfld_eg()
+        neg_examples, neg_distances = None, None
+        if not self._genattrs.online:
+            neg_examples, neg_distances = self.make_off_mfld_eg()
         
         #embedding the points
         self._genattrs.points_n_trivial_ = np.zeros((self._genattrs.N, self._genattrs.n))
-        self._genattrs.points_n_trivial_[:self._genattrs.num_neg] = neg_examples
+        self._genattrs.points_n_trivial_[:num_neg] = neg_examples
         
-        self._genattrs.points_n_trivial_[self._genattrs.num_neg:, :self._genattrs.k] = self._genattrs.points_k
+        self._genattrs.points_n_trivial_[num_neg:, :self._genattrs.k] = self._genattrs.points_k
         self._genattrs.points_n_tr_ = self._genattrs.points_n_trivial_ + self._genattrs.translation
         
         self._genattrs.points_n_rot_ = np.dot(self._genattrs.rotation, self._genattrs.points_n_tr_.T).T
@@ -269,8 +369,8 @@ class RandomSphere(Manifold, Dataset):
         self._genattrs.points_n = self._genattrs.points_n_rot_
         
         self._genattrs.actual_distances = np.zeros((self._genattrs.N, 1))
-        self._genattrs.actual_distances[:self._genattrs.num_neg] = neg_distances.reshape(-1, 1)
-        self._genattrs.actual_distances[self._genattrs.num_neg:] = np.linalg.norm(self._genattrs.points_n[self._genattrs.num_neg:] - self._specattrs.x_cn, axis=1, ord=2).reshape(-1, 1) - self._specattrs.r
+        self._genattrs.actual_distances[:num_neg] = neg_distances.reshape(-1, 1)
+        self._genattrs.actual_distances[num_neg:] = np.linalg.norm(self._genattrs.points_n[num_neg:] - self._specattrs.x_cn, axis=1, ord=2).reshape(-1, 1) - self._specattrs.r
         self._genattrs.distances = np.clip(self._genattrs.actual_distances, a_min=0, a_max=self._genattrs.D)
         
         # checking that the on-manifold points are still self.r away from center
@@ -300,7 +400,7 @@ class RandomSphere(Manifold, Dataset):
         self._genattrs.normed_points_n = self._genattrs.normed_points_n - self._genattrs.anchor + self._genattrs.fix_center
 
         self._genattrs.normed_points_n = self._genattrs.normed_points_n.float()
-        self._genattrs.normed_distances = self._genattrs.distances.float()
+        self._genattrs.normed_distances = self._genattrs.normed_distances.float()
         self._genattrs.normed_actual_distances = self._genattrs.normed_actual_distances.float()
 
     def invert_points(self, normed_points):
@@ -312,14 +412,61 @@ class RandomSphere(Manifold, Dataset):
         """invert normalised distances to unnormalised values"""
         return normed_distances * self._genattrs.norm_factor
 
+    def online_compute_points(self, batch):
+        
+        batch_N = batch["points_n"].shape[0]
+        batch_num_neg = self._genattrs.num_neg # here it represents proportion of off-manifold points in each batch
+        online_batch = None
+
+        if self._genattrs.off_online:
+            # sample indices that will be replaces with off manifold samples
+            random_idx = np.random.choice(np.arange(batch_N), size=int(1 - (1 / (batch_num_neg + 1)) * batch_N))
+            
+            # generate on-the-fly pre-images for off-manifold points
+            online_pre_images = self.online_gen_pre_images(batch["points_k"][random_idx])
+            
+            # embed the on-mfld and off-mfld samples in n-dims
+            online_batch = self.online_embed_in_n(batch["points_k"][~random_idx], online_pre_images)
+
+            online_batch = {i: torch.from_numpy(online_batch[i]).float() for i in online_batch}
+            if self._genattrs.normalize:
+                online_batch.update(**self.online_norm(
+                    online_points_n=online_batch["points_n"],
+                    online_distances=online_batch["distances"],
+                    online_actual_distances=online_batch["actual_distances"]
+                ))
+        else:
+            # if all samples are to be sampled on-the-fly, pass the whole thing to gen_pre_images
+            online_samples = self.online_gen_pre_images(batch["points_k"])
+
+            # next, sample indices for the ones which will be off-manifold
+            random_idx = np.random.choice(np.arange(batch_N), size=int(1 - (1 / (batch_num_neg + 1)) * batch_N))
+
+            # embed the on-mfld and off-mfld samples in n-dims
+            online_batch = self.online_embed_in_n(online_samples[~random_idx], online_samples[random_idx])
+            
+             # embed the on-mfld and off-mfld samples in n-dims
+            online_batch = self.online_embed_in_n(batch["points_k"][~random_idx], online_pre_images)
+
+            online_batch = {i: torch.from_numpy(online_batch[i]).float() for i in online_batch}
+            if self._genattrs.normalize:
+                online_batch.update(**self.online_norm(
+                    online_points_n=online_batch["points_n"],
+                    online_distances=online_batch["distances"],
+                    online_actual_distances=online_batch["actual_distances"]
+                ))
+
+        return online_batch
+
     def compute_points(self):
         
         self.gen_center()
         print("[RandomSphere]: generated centre")
         self.gen_points()
         print("[RandomSphere]: generated points in k-dim")
-        self.gen_pre_images()
-        print("[RandomSphere]: pre-images generated")
+        if not self._genattrs.online:
+            self.gen_pre_images()
+            print("[RandomSphere]: pre-images generated")
         self.embed_in_n()
         print("[RandomSphere]: embedded the sphere in n-dim space")
 
@@ -331,6 +478,8 @@ class RandomSphere(Manifold, Dataset):
         if self._genattrs.normalize:
             self.norm()
             print("[RandomSphere]: normalization complete")
+                
+
 
     def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):
         """

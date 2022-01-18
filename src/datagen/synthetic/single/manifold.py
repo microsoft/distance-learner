@@ -24,11 +24,12 @@ class GeneralManifoldAttrs(object):
 
     def __init__(self, N=1000, num_neg=None, n=100, k=3, D=50.0,\
                  max_norm=2.0, mu=10, sigma=5, seed=42, normalize=True,\
-                 norm_factor=1, gamma=0.5, anchor=None, rotation=None, translation=None, **kwargs):
+                 norm_factor=1, gamma=0.5, anchor=None, rotation=None, translation=None,\
+                 online=False, off_online=False, augment=1, **kwargs):
         """
         :param N: total number of samples
         :type N: int
-        :param num_neg: number of off-manifold points in the dataset
+        :param num_neg: (static) number or (dynamic) proportion of off-manifold points in the (static) dataset or (online) batch
         :type num_neg: int
         :param n: dimension of space in which manifold is embedded
         :type n: int
@@ -56,10 +57,16 @@ class GeneralManifoldAttrs(object):
         :type numpy.ndarray:
         :param translation: translation vector to be used
         :type numpy.array:
+        :param online: create points online on the fly
+        :type online: bool
+        :param off_online: bool
+        :type off_online: only off-manifold points are created on the fly
+        :param augment: float
+        :type augment: off-manifold points created from on-manifold on the fly (like augmentations) 
         """
 
         self._N = N
-        self._num_neg = np.floor(self._N / 2).astype(np.int64).item()
+        self._num_neg = np.floor(self._N / 2).astype(np.int64).item() if not online else 1
         if num_neg is not None:
             self._num_neg = num_neg
         self._n = n
@@ -74,8 +81,12 @@ class GeneralManifoldAttrs(object):
         self._norm_factor = norm_factor
         self._rotation = None
         self._translation = None
+        self._online = online
+        self._off_online = off_online
+        self._augment = augment
 
-        self._anchor = None
+        self._anchor = anchor
+
         if translation is None:
             self._translation = np.random.normal(mu, sigma, n)
         else:
@@ -180,6 +191,29 @@ class GeneralManifoldAttrs(object):
     def translation(self):
         return self._translation
 
+    @property
+    def online(self):
+        return self._online
+
+    @online.setter
+    def online(self, x):
+        raise RuntimeError("cannot set `online` after instantiation!")
+
+    @property
+    def off_online(self):
+        return self._off_online
+
+    @off_online.setter
+    def off_online(self, x):
+        raise RuntimeError("cannot set `off_online` after instantiation!")
+
+    @property
+    def augment(self):
+        return self._augment
+
+    @augment.setter
+    def augment(self, x):
+        raise RuntimeError("cannot set `augment` after instantiation!")
 
 
 class SpecificManifoldAttrs(ABC):
@@ -348,6 +382,14 @@ class Manifold(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def online_compute_normals(self):
+        """
+        compute the normal at each point in the trivial embedding
+        of the (k-1)-dimensional manifold in n-dimensions
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def make_off_mfld_eg(self):
         """
         using normals for computing the normal space and
@@ -391,6 +433,51 @@ class Manifold(ABC):
         neg_distances = neg_norms
         
         return neg_examples, neg_distances
+
+    @abstractmethod
+    def online_make_off_mfld_eg(self, online_batch):
+        """
+        using normals for computing the normal space and
+        the off-manifold examples
+        """
+
+        embedded_normal_vectors_to_mfld_at_p = self.online_compute_normals(online_batch)
+
+        # canonical basis $e_i$ over leftover dimensions
+        remaining_dims = self._genattrs.n - self._genattrs.k
+        leftover_basis = np.eye(remaining_dims)
+
+        # variable storing the remaining spanning set apart from the normal
+        remaining_span_set = np.zeros((remaining_dims, self._genattrs.n))
+        remaining_span_set[:, self._genattrs.k:] = leftover_basis
+
+        # coefficients for the remaining basis vectors
+        remaining_coefficients = np.random.normal(self._genattrs.mu,\
+             self._genattrs.sigma, size=(self._genattrs.num_neg, self._genattrs.n))
+        # sum of the remaning span set
+        sum_span_set = np.sum(remaining_span_set, axis=0)
+        # taking advantage of the standard basis, we can form convert the sum to a linear combination
+        remaining_linear_combination = remaining_coefficients * sum_span_set
+
+        # coefficients to multiply the normals
+        first_coefficients = np.random.normal(self._genattrs.mu, self._genattrs.sigma,\
+             size=(self._genattrs.num_neg, 1))
+        weighted_normals = first_coefficients * embedded_normal_vectors_to_mfld_at_p
+    
+        online_neg_examples = weighted_normals + remaining_linear_combination
+
+        # re-scale with random norms, sampled from U[\epsilon, self.max_norm]
+        online_neg_norms = np.random.uniform(low=1e-6 + np.finfo(np.float).eps,\
+             high=self._genattrs.max_norm, size=self._genattrs.num_neg)            
+        online_neg_examples = (online_neg_norms.reshape(-1, 1) / np.linalg.norm(online_neg_examples, axis=1, ord=2).reshape(-1, 1)) * online_neg_examples
+
+        # add position vector of $p$ to get origin centered coordinates
+        online_neg_examples[:, :self._genattrs.k] = online_neg_examples[:, :self._genattrs.k] + self._genattrs.pre_images_k
+
+        # distances from the manifold will be the norms the samples were rescaled by
+        online_neg_distances = online_neg_norms
+        
+        return online_neg_examples, online_neg_distances
 
     @abstractmethod
     def embed_in_n(self):

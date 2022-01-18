@@ -49,7 +49,7 @@ from expB.workspace import *
 
 from datagen.synthetic.multiple.intertwinedswissrolls import IntertwinedSwissRolls
 
-
+from utils import *
 
 
 SEED = 42
@@ -125,7 +125,7 @@ def init():
 def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,\
           feature_name="normed_points", target_name="normed_distances",\
           num_epochs=500, task="regression", name="MLP_512x4_in1000",\
-          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=False):
+          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=False, online=False):
     """
         Function to train the model. Also dumps the best model.
         
@@ -408,6 +408,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 plt.title("gt vs. pred {}".format(target_name))
                 plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_all_{}.png".format(phase)))
         
+        if online:
+            tmp = {ph: DataLoader(dataloaders[ph].dataset, shuffle=True, num_workers=dataloaders[ph].num_workers, batch_size=dataloaders["i"].batch_size, worker_init_fn=lambda wid: seed_everything(2**(3*wid+ 2*epoch) + (1000%(3*wid+ 2*epoch + 1)))) for ph in dataloaders}
+            dataloaders = tmp
+
         check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss or epoch == 100
         stat = "val_loss"
         if task == "clf":

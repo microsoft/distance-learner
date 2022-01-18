@@ -1,5 +1,16 @@
 import os
+import random
+
+import torch
 import numpy as np
+
+
+def seed_everything(manual_seed):
+    random.seed(manual_seed)
+    torch.manual_seed(manual_seed)
+    torch.cuda.manual_seed(manual_seed)
+    np.random.seed(manual_seed)
+    return manual_seed
 
 def make_new_res_dir(parent_path, fmt_str, exist_ok=True, duplicate=True, *args):
     new_dir_name = fmt_str.format(*args)
