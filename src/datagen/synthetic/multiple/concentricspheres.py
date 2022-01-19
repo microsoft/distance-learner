@@ -425,6 +425,47 @@ class ConcentricSpheres(Dataset):
         unnormed_distances = self.norm_factor * normed_distances
         return unnormed_distances
 
+    def online_compute_points(self, batch, idx):
+        """
+        * in case of online sampling:
+            Case I : batch will have only on-manifold points for which we need augmentations 
+            Case II: batch will not be needed at all
+        * In Case I, we need constituent sphere indices of the points, compose a batch and 
+          pass them to the `online_compute_points` method of the sphere
+        * In Case II, we need neither `batch` or `idx` as input, but just confirm that 
+          passing `None` to `self.S*.online_compute_points` does not blast
+        * In either case, retrieved points must be normalised using current class's `norm` method
+        
+        TODO: Complete this method!
+        """
+
+        batch_pts = batch["points"]
+        class_labels = batch["classes"]
+
+        tot_count_per_mfld = self._N // 2
+
+        # still a bit queasy about this
+        mfld = self.S2 if class_labels == 1 else self.S1 
+
+        # find idx of points in the constituent spheres
+        cs_idx = idx - tot_count_per_mfld if class_labels == 1 else idx
+        
+        # extract corresponding batch from the constituent sphere
+        # (this will sample points on-the-fly as needed, since the constituent manifold knows the settings)
+        cs_batch = mfld[cs_idx]
+
+        # pass extracted batch to method for extracting on-the-fly samples from constituent sphere
+        online_cs_batch = mfld.online_compute_points(cs_batch)
+
+        # re-assemble online constituent sphere batch to resemble container class batch
+        online_all_points = online_cs_batch["points_n"]
+        online_all_disances = online_cs_batch["distances"]
+        online_all_actual_distances = online_cs_batch["actual_distances"]
+        online_classes = batch["classes"]
+
+        return None 
+
+
     def load_data(self, dump_dir):
         specs_fn = os.path.join(dump_dir, "specs.json")
         data_fn = os.path.join(dump_dir, "data.pkl")

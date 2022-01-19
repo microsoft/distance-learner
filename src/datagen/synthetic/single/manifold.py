@@ -66,7 +66,7 @@ class GeneralManifoldAttrs(object):
         """
 
         self._N = N
-        self._num_neg = np.floor(self._N / 2).astype(np.int64).item() if not online else 1
+        self._num_neg = np.floor(self._N / 2).astype(np.int64).item() if not online else 0.5
         if num_neg is not None:
             self._num_neg = num_neg
         self._n = n
@@ -435,13 +435,13 @@ class Manifold(ABC):
         return neg_examples, neg_distances
 
     @abstractmethod
-    def online_make_off_mfld_eg(self, online_batch):
+    def online_make_off_mfld_eg(self, online_pt):
         """
         using normals for computing the normal space and
         the off-manifold examples
         """
 
-        embedded_normal_vectors_to_mfld_at_p = self.online_compute_normals(online_batch)
+        embedded_normal_vectors_to_mfld_at_p = self.online_compute_normals(online_pt)
 
         # canonical basis $e_i$ over leftover dimensions
         remaining_dims = self._genattrs.n - self._genattrs.k
@@ -453,7 +453,7 @@ class Manifold(ABC):
 
         # coefficients for the remaining basis vectors
         remaining_coefficients = np.random.normal(self._genattrs.mu,\
-             self._genattrs.sigma, size=(self._genattrs.num_neg, self._genattrs.n))
+             self._genattrs.sigma, size=self._genattrs.n)
         # sum of the remaning span set
         sum_span_set = np.sum(remaining_span_set, axis=0)
         # taking advantage of the standard basis, we can form convert the sum to a linear combination
@@ -461,18 +461,18 @@ class Manifold(ABC):
 
         # coefficients to multiply the normals
         first_coefficients = np.random.normal(self._genattrs.mu, self._genattrs.sigma,\
-             size=(self._genattrs.num_neg, 1))
+             size=1)
         weighted_normals = first_coefficients * embedded_normal_vectors_to_mfld_at_p
     
         online_neg_examples = weighted_normals + remaining_linear_combination
 
         # re-scale with random norms, sampled from U[\epsilon, self.max_norm]
         online_neg_norms = np.random.uniform(low=1e-6 + np.finfo(np.float).eps,\
-             high=self._genattrs.max_norm, size=self._genattrs.num_neg)            
-        online_neg_examples = (online_neg_norms.reshape(-1, 1) / np.linalg.norm(online_neg_examples, axis=1, ord=2).reshape(-1, 1)) * online_neg_examples
+             high=self._genattrs.max_norm, size=1)            
+        online_neg_examples = (online_neg_norms / np.linalg.norm(online_neg_examples, ord=2)) * online_neg_examples
 
         # add position vector of $p$ to get origin centered coordinates
-        online_neg_examples[:, :self._genattrs.k] = online_neg_examples[:, :self._genattrs.k] + self._genattrs.pre_images_k
+        online_neg_examples[:self._genattrs.k] = online_neg_examples[:self._genattrs.k] + online_pt.numpy()
 
         # distances from the manifold will be the norms the samples were rescaled by
         online_neg_distances = online_neg_norms
