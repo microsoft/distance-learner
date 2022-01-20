@@ -266,10 +266,10 @@ class RandomSphere(Manifold, Dataset):
         }
  
         
-        seed_everything(self._genattrs.seed + idx)
-        if self._genattrs.online:
-            batch["points_k"] = self._genattrs.points_k[idx]
-            batch = self.online_compute_points(batch)
+        # seed_everything(self._genattrs.seed + idx)
+        # if self._genattrs.online:
+        #     batch["points_k"] = self._genattrs.points_k[idx]
+        #     batch = self.online_compute_points(batch)
 
         return batch
 
@@ -288,10 +288,6 @@ class RandomSphere(Manifold, Dataset):
         """
 
         num_onmfld_samples = self._genattrs.N - self._genattrs.num_neg
-        if self._genattrs.online:
-            # in case of online sampling, `num_neg` means something
-            # different and `N` denotes total on manifold samples
-            num_onmfld_samples = self._genattrs.N
 
         points_k = np.random.normal(size=(num_onmfld_samples, self._genattrs.k))
         
@@ -306,27 +302,42 @@ class RandomSphere(Manifold, Dataset):
         
         self._genattrs.points_k = points_k
 
-    def gen_pre_images(self):
+    def gen_pre_images(self, pre_images=None):
         """
         generating on-manifold k-dimensional projections of off-maniofld samples
         
         this is essentially a clone of `self.gen_points` but I am too afraid to fiddle
         with it, in case things break and the earth swallows me whole.
+
+        [20 Jan 2022] EDIT: if either online is not enabled or augment is not enabled
+        only then sample fresh points, else this acts as an identity function for input
+        parameter `pre_images` which should be points for which augmentations are sought;
+
         """
+        num_off_mfld_ex = self._genattrs.num_neg
 
-        points_k = np.random.normal(size=(self._genattrs.num_neg, self._genattrs.k))
-        
-        
-        norms = np.linalg.norm(points_k, axis=1, ord=2).reshape(-1, 1)
-        points_k = (points_k / norms)
-        
-        assert (np.round(np.linalg.norm(points_k, axis=1, ord=2)) == 1).all()
-        
-        points_k = self._specattrs.r * points_k
+        if not (self._genattrs.online and self._genattrs.augment):
+            points_k = np.random.normal(size=(num_off_mfld_ex, self._genattrs.k))
 
-        points_k = points_k + self._specattrs.x_ck
-        
-        self._genattrs.pre_images_k = points_k
+            norms = np.linalg.norm(points_k, axis=1, ord=2).reshape(-1, 1)
+            points_k = (points_k / norms)
+            
+            assert (np.round(np.linalg.norm(points_k, axis=1, ord=2)) == 1).all()
+            
+            points_k = self._specattrs.r * points_k
+
+            points_k = points_k + self._specattrs.x_ck
+            
+            self._genattrs.pre_images_k = points_k
+
+            return points_k
+        elif pre_images is not None:
+            random_idx = np.random.randint(self._genattrs.N - self._genattrs.num_neg,\
+                 size=num_off_mfld_ex)
+            return pre_images[random_idx]
+
+        else:
+            raise RuntimeError("expected `pre_images` but got None")
 
     def compute_normals(self):
         
@@ -345,19 +356,19 @@ class RandomSphere(Manifold, Dataset):
     def make_off_mfld_eg(self):
         return super().make_off_mfld_eg()
 
-    def embed_in_n(self):
-        
+    def embed_in_n(self, resample=False):
         """embedding center and sampled points in `self._genattrs.n`-dims"""
         
-        num_neg = self._genattrs.num_neg if not self._genattrs.online else 0
+        num_neg = self._genattrs.num_neg
 
         # embedding the center
-        self._specattrs.x_cn_trivial_ = np.zeros(self._genattrs.n)
-        self._specattrs.x_cn_trivial_[:self._genattrs.k] = self._specattrs.x_ck
-        self._specattrs.x_cn_tr_ = self._specattrs.x_cn_trivial_ + self._genattrs.translation
-        self._specattrs.x_cn_rot_ = np.dot(self._genattrs.rotation, self._specattrs.x_cn_tr_)
-        self._specattrs.x_cn = self._specattrs.x_cn_rot_
-        
+        if not resample:
+            self._specattrs.x_cn_trivial_ = np.zeros(self._genattrs.n)
+            self._specattrs.x_cn_trivial_[:self._genattrs.k] = self._specattrs.x_ck
+            self._specattrs.x_cn_tr_ = self._specattrs.x_cn_trivial_ + self._genattrs.translation
+            self._specattrs.x_cn_rot_ = np.dot(self._genattrs.rotation, self._specattrs.x_cn_tr_)
+            self._specattrs.x_cn = self._specattrs.x_cn_rot_
+            
         
         # generate the negative examples
         neg_examples, neg_distances = None, None
@@ -366,7 +377,7 @@ class RandomSphere(Manifold, Dataset):
         
         #embedding the points
         self._genattrs.points_n_trivial_ = np.zeros((self._genattrs.N, self._genattrs.n))
-        if not self._genattrs.online: self._genattrs.points_n_trivial_[:num_neg] = neg_examples
+        self._genattrs.points_n_trivial_[:num_neg] = neg_examples
         
         self._genattrs.points_n_trivial_[num_neg:, :self._genattrs.k] = self._genattrs.points_k
         self._genattrs.points_n_tr_ = self._genattrs.points_n_trivial_ + self._genattrs.translation
@@ -385,15 +396,21 @@ class RandomSphere(Manifold, Dataset):
 
 
 
-    def norm(self):
+    def norm(self, resample=False):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
         if self._genattrs.norm_factor is None:
             # NOTE: using `_norm_factor` to set `norm_factor` in `self._genattrs`. DO NOT MAKE THIS A HABIT!!!
             self._genattrs._norm_factor = self._genattrs.gamma * np.max(np.linalg.norm(self._genattrs.points_n - self._specattrs.x_cn, ord=2, axis=1)).item()
             assert self._genattrs.norm_factor == self._genattrs._norm_factor
         # print("sphere norm_factors", self._genattrs.norm_factor, self._genattrs._norm_factor)
-        self._genattrs.normed_points_n = self._genattrs.points_n / self._genattrs.norm_factor
-        self._specattrs.normed_x_cn = self._specattrs.x_cn / self._genattrs.norm_factor
+        if (not resample) or (resample and (not self._genattrs.off_online)): 
+            # only normalize these when either static or when `off_online` is disabled
+            self._genattrs.normed_points_n = self._genattrs.points_n / self._genattrs.norm_factor
+        elif resample and self._genattrs.off_online:
+            # when not static and `off_online` is enabled
+            num_neg = int(self._genattrs.num_neg * self._genattrs.N)
+            self._genattrs.normed_points_n[:self._genattrs.num_neg] = self._genattrs.points_n[:self._genattrs.num_neg] / self._genattrs.norm_factor
+        if not resample: self._specattrs.normed_x_cn = self._specattrs.x_cn / self._genattrs.norm_factor
         self._genattrs.normed_distances = self._genattrs.distances / self._genattrs.norm_factor
         self._genattrs.normed_actual_distances = self._genattrs.actual_distances / self._genattrs.norm_factor
 
@@ -454,9 +471,9 @@ class RandomSphere(Manifold, Dataset):
         print("[RandomSphere]: generated centre")
         self.gen_points()
         print("[RandomSphere]: generated points in k-dim")
-        if not self._genattrs.online:
-            self.gen_pre_images()
-            print("[RandomSphere]: pre-images generated")
+        pre_images = self._genattrs.points_k if self._genattrs.augment else None
+        self.gen_pre_images(pre_images)
+        print("[RandomSphere]: pre-images generated")
         self.embed_in_n()
         print("[RandomSphere]: embedded the sphere in n-dim space")
 
@@ -469,6 +486,31 @@ class RandomSphere(Manifold, Dataset):
             self.norm()
             print("[RandomSphere]: normalization complete")
                 
+    def resample_points(self, seed=None):
+        """to re-sample points on-the-fly at the end of each epoch"""
+
+        if seed is None:
+            print("[RandomSphere]: no seed provided. proceeding with current seed")
+        else:
+            print("[RandomSphere]: re-sampling points with seed={}".format(seed))
+            seed_everything(seed)
+        if not self._genattrs.off_online:
+            self.gen_points()
+            print("[RandomSphere]: generated points in k-dim")
+        pre_images = self._genattrs.points_k if self._genattrs.augment else None
+        self.gen_pre_images(pre_images)
+        print("[RandomSphere]: pre-images generated")
+        self.embed_in_n(resample=True)
+        print("[RandomSphere]: embedded the sphere in n-dim space")
+        
+        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
+        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
+        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float()
+        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float()
+
+        if self._genattrs.normalize:
+            self.norm(resample=True)
+            print("[RandomSphere]: normalization complete")
 
 
     def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):

@@ -29,7 +29,7 @@ class GeneralManifoldAttrs(object):
         """
         :param N: total number of samples
         :type N: int
-        :param num_neg: (static) number or (dynamic) proportion of off-manifold points in the (static) dataset or (online) batch
+        :param num_neg: (static/dynamic) number of off-manifold points in the (static/dynamic) dataset (each epoch in dynamic)
         :type num_neg: int
         :param n: dimension of space in which manifold is embedded
         :type n: int
@@ -66,7 +66,7 @@ class GeneralManifoldAttrs(object):
         """
 
         self._N = N
-        self._num_neg = np.floor(self._N / 2).astype(np.int64).item() if not online else 0.5
+        self._num_neg = np.floor(self._N / 2).astype(np.int64).item()
         if num_neg is not None:
             self._num_neg = num_neg
         self._n = n

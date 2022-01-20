@@ -360,6 +360,65 @@ class ConcentricSpheres(Dataset):
 
         self.get_all_points_k()
 
+    def resample_points(self, seed=42):
+
+        if seed is None:
+            print("[ConcentricSpheres]: No seed provided. proceeding with current seed")
+        else:
+            print("[ConcentricSpheres]: Re-sampling points with seed={}".format(seed))
+            seed_everything(seed)
+        
+        print("[ConcentricSpheres]: Starting re-sampling from S1")
+        self.S1.resample_points()
+        print("[ConcentricSpheres]: Re-sampling from S1 done")
+
+        print("[ConcentricSpheres]: Starting re-sampling from S2")
+        self.S2.resample_points()
+        print("[ConcentricSpheres]: Re-sampling from S2 done")
+
+        self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
+        
+        self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+        self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
+        self.all_distances[:self.S1.genattrs.N, 1] = self._D
+        self.all_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.distances.reshape(-1)
+        self.all_distances[self.S1.genattrs.N:, 0] = self._D
+
+        # giving class labels
+        # 2: no manifold; 0: S_1; 1: S_2
+        self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+        self.class_labels[:self.S1.genattrs.num_neg] = 2
+        self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+        self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
+        self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+
+        # true distances of points in S1 to S2 and vice versa are not available and marked `M`
+        self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+        self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
+        self.all_actual_distances[:self.S1.genattrs.N, 1] = self._M
+        self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
+        self.all_actual_distances[self.S1.genattrs.N:, 0] = self._M
+
+        # smoothed distances of points
+        self.all_smooth_distances = np.copy(self.all_actual_distances)
+        within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
+        self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
+        self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
+
+        self.all_points = torch.from_numpy(self.all_points).float()
+        self.all_distances = torch.from_numpy(self.all_distances).float()
+        self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
+        self.all_smooth_distances = torch.from_numpy(self.all_smooth_distances).float()
+        self.class_labels = torch.from_numpy(self.class_labels).long()
+
+        if self._normalize:
+            self.norm(resample=True)
+            print("[ConcentricSpheres]: Re-sampling noramalization done")
+
+        self.get_all_points_k()
+
+
+
     def get_all_points_k(self):
         """
         get the k-dim embedding of all the normalised points
@@ -382,7 +441,7 @@ class ConcentricSpheres(Dataset):
         self.all_points_k = torch.from_numpy(k_dim_samples).float()
         return k_dim_samples
 
-    def norm(self):
+    def norm(self, resample=False):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
         if self.norm_factor is None:
             self.norm_factor = max(
@@ -391,7 +450,7 @@ class ConcentricSpheres(Dataset):
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
         
-        self._anchor = self._x_cn / self.norm_factor
+        if not resample: self._anchor = self._x_cn / self.norm_factor
         
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
