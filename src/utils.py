@@ -1,5 +1,6 @@
 import os
 import random
+import logging
 
 import torch
 import numpy as np
@@ -11,6 +12,16 @@ def seed_everything(manual_seed):
     torch.cuda.manual_seed(manual_seed)
     np.random.seed(manual_seed)
     return manual_seed
+
+def init_logger(name):
+    logger = logging.getLogger(name)
+    logger.handlers = []
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s -- [%(levelname).1s] %(name)s >> %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+    logger.setLevel("INFO")
+    return logger
 
 def make_new_res_dir(parent_path, fmt_str, exist_ok=True, duplicate=True, *args):
     new_dir_name = fmt_str.format(*args)

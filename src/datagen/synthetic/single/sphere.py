@@ -1,5 +1,3 @@
-from abc import abstractmethod
-from optparse import OptionConflictError
 import os
 import sys
 import copy
@@ -17,6 +15,9 @@ from torch.utils.data import Dataset
 
 from utils import *
 from .manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
+
+
+logger = init_logger(__name__)
 
 
 class SpecificSphereAttrs(SpecificManifoldAttrs):
@@ -115,6 +116,10 @@ class RandomSphere(Manifold, Dataset):
                  off_online=False, augment=False):
         """constructor for class containing a random sphere"""
 
+        ## setting seed
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+
         self._genattrs = genattrs
         self._specattrs = specattrs
 
@@ -129,10 +134,6 @@ class RandomSphere(Manifold, Dataset):
             self._specattrs = SpecificSphereAttrs(mu=self._genattrs.mu,\
                  sigma=self._genattrs.sigma, seed=self._genattrs.seed,\
                  n=self._genattrs.n, x_ck=x_ck, r=r)
-
-        ## setting seed
-        torch.manual_seed(self._genattrs.seed)
-        np.random.seed(self._genattrs.seed)
 
 
     @property
@@ -334,7 +335,8 @@ class RandomSphere(Manifold, Dataset):
         elif pre_images is not None:
             random_idx = np.random.randint(self._genattrs.N - self._genattrs.num_neg,\
                  size=num_off_mfld_ex)
-            return pre_images[random_idx]
+            self._genattrs.pre_images_k = pre_images[random_idx]
+            return pre_images[random_idx]            
 
         else:
             raise RuntimeError("expected `pre_images` but got None")
@@ -371,9 +373,7 @@ class RandomSphere(Manifold, Dataset):
             
         
         # generate the negative examples
-        neg_examples, neg_distances = None, None
-        if not self._genattrs.online:
-            neg_examples, neg_distances = self.make_off_mfld_eg()
+        neg_examples, neg_distances = self.make_off_mfld_eg()
         
         #embedding the points
         self._genattrs.points_n_trivial_ = np.zeros((self._genattrs.N, self._genattrs.n))
@@ -398,17 +398,17 @@ class RandomSphere(Manifold, Dataset):
 
     def norm(self, resample=False):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
+        
         if self._genattrs.norm_factor is None:
             # NOTE: using `_norm_factor` to set `norm_factor` in `self._genattrs`. DO NOT MAKE THIS A HABIT!!!
             self._genattrs._norm_factor = self._genattrs.gamma * np.max(np.linalg.norm(self._genattrs.points_n - self._specattrs.x_cn, ord=2, axis=1)).item()
             assert self._genattrs.norm_factor == self._genattrs._norm_factor
-        # print("sphere norm_factors", self._genattrs.norm_factor, self._genattrs._norm_factor)
+
         if (not resample) or (resample and (not self._genattrs.off_online)): 
             # only normalize these when either static or when `off_online` is disabled
             self._genattrs.normed_points_n = self._genattrs.points_n / self._genattrs.norm_factor
         elif resample and self._genattrs.off_online:
             # when not static and `off_online` is enabled
-            num_neg = int(self._genattrs.num_neg * self._genattrs.N)
             self._genattrs.normed_points_n[:self._genattrs.num_neg] = self._genattrs.points_n[:self._genattrs.num_neg] / self._genattrs.norm_factor
         if not resample: self._specattrs.normed_x_cn = self._specattrs.x_cn / self._genattrs.norm_factor
         self._genattrs.normed_distances = self._genattrs.distances / self._genattrs.norm_factor
@@ -468,14 +468,14 @@ class RandomSphere(Manifold, Dataset):
     def compute_points(self):
         
         self.gen_center()
-        print("[RandomSphere]: generated centre")
+        logger.info("[RandomSphere]: generated centre")
         self.gen_points()
-        print("[RandomSphere]: generated points in k-dim")
+        logger.info("[RandomSphere]: generated points in k-dim")
         pre_images = self._genattrs.points_k if self._genattrs.augment else None
         self.gen_pre_images(pre_images)
-        print("[RandomSphere]: pre-images generated")
+        logger.info("[RandomSphere]: pre-images generated")
         self.embed_in_n()
-        print("[RandomSphere]: embedded the sphere in n-dim space")
+        logger.info("[RandomSphere]: embedded the sphere in n-dim space")
 
         self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
         self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
@@ -484,24 +484,24 @@ class RandomSphere(Manifold, Dataset):
 
         if self._genattrs.normalize:
             self.norm()
-            print("[RandomSphere]: normalization complete")
+            logger.info("[RandomSphere]: normalization complete")
                 
     def resample_points(self, seed=None):
         """to re-sample points on-the-fly at the end of each epoch"""
 
         if seed is None:
-            print("[RandomSphere]: no seed provided. proceeding with current seed")
+            logger.info("[RandomSphere]: no seed provided. proceeding with current seed")
         else:
-            print("[RandomSphere]: re-sampling points with seed={}".format(seed))
+            logger.info("[RandomSphere]: re-sampling points with seed={}".format(seed))
             seed_everything(seed)
         if not self._genattrs.off_online:
             self.gen_points()
-            print("[RandomSphere]: generated points in k-dim")
+            logger.info("[RandomSphere]: generated points in k-dim")
         pre_images = self._genattrs.points_k if self._genattrs.augment else None
         self.gen_pre_images(pre_images)
-        print("[RandomSphere]: pre-images generated")
+        logger.info("[RandomSphere]: pre-images generated")
         self.embed_in_n(resample=True)
-        print("[RandomSphere]: embedded the sphere in n-dim space")
+        logger.info("[RandomSphere]: embedded the sphere in n-dim space")
         
         self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
         self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
@@ -510,7 +510,7 @@ class RandomSphere(Manifold, Dataset):
 
         if self._genattrs.normalize:
             self.norm(resample=True)
-            print("[RandomSphere]: normalization complete")
+            logger.info("[RandomSphere]: normalization complete")
 
 
     def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):
@@ -741,8 +741,8 @@ class RandomSphere(Manifold, Dataset):
             
         errors = np.abs(self._genattrs.actual_distances[idx].numpy().reshape(-1) - np.array(min_dist_vals))
         rel_errors = errors / self._genattrs.actual_distances[idx].numpy().reshape(-1)
-        print("absolute errors:", errors)
-        print("relative errors:", rel_errors)
+        logger.info("absolute errors:", errors)
+        logger.info("relative errors:", rel_errors)
 
     def load_data(self, dump_dir):
         """
