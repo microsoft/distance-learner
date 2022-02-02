@@ -397,8 +397,9 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 
 ```bash
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=1e-5 debug=False loss_func=std_mse cuda=0 tgtname=normed_actual_distances \
  data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500_noninfdist \
+ data.data_tag=rdm_concspheres_k500n500_noninfdist_sepseed \
  data.data_params.train.N=1000000 \
+ data.data_params.train.seed=1100 \
  data.data_params.train.k=500 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
@@ -409,6 +410,9 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=1e-5 
  data.data_params.train.D=0.07 \
  data.data_params.train.norm_factor=1 \
  data.data_params.train.gamma=0 \
+ data.data_params.train.online=False \
+ data.data_params.train.off_online=False \
+ data.data_params.train.augment=False \
  data.data_params.val.k=500 \
  data.data_params.val.n=500 \
  data.data_params.val.r=1 \
@@ -420,6 +424,9 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=1e-5 
  data.data_params.val.D=0.07 \
  data.data_params.val.norm_factor=1 \
  data.data_params.val.gamma=0 \
+ data.data_params.val.online=False \
+ data.data_params.val.off_online=False \
+ data.data_params.val.augment=False \
  data.data_params.test.k=500 \
  data.data_params.test.n=500 \
  data.data_params.test.r=1 \
@@ -431,6 +438,9 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=1e-5 
  data.data_params.test.D=0.07 \
  data.data_params.test.norm_factor=1 \
  data.data_params.test.gamma=0 \
+ data.data_params.test.online=False \
+ data.data_params.test.off_online=False \
+ data.data_params.test.augment=False \
  model.input_size=500 \
  data.generate=True \
  task=regression

@@ -9,10 +9,16 @@ inpfn_ingredient = Ingredient('input_files')
 def inpfn_config():
 
 
-    proj_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/"
+    # proj_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/"
+    # settings_to_analyze = {
+    #     "rdm_concspheres_k100n100_noninfdist": ["1", "2"],
+    #     "rdm_concspheres_k500n500_noninfdist": ["1", "2"]
+    # }
+    proj_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
     settings_to_analyze = {
-        "rdm_concspheres_k100n100_noninfdist": ["1", "2"],
-        "rdm_concspheres_k500n500_noninfdist": ["1", "2"]
+        "rdm_concspheres_k2n500_noninfdist": ["1", "2"],
+        "rdm_concspheres_k500n500_noninfdist": ["1", "2"],
+        "rdm_concspheres_k50n500_noninfdist": ["1", "2"]
     }
     settings_fn = None
     if settings_fn is not None:

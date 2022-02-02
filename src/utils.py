@@ -4,7 +4,7 @@ import logging
 
 import torch
 import numpy as np
-
+import pandas as pd
 
 def seed_everything(manual_seed):
     random.seed(manual_seed)
@@ -13,8 +13,8 @@ def seed_everything(manual_seed):
     np.random.seed(manual_seed)
     return manual_seed
 
-def init_logger(name):
-    logger = logging.getLogger(name)
+def init_logger(name=None):
+    logger = logging.getLogger()
     logger.handlers = []
     ch = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s -- [%(levelname).1s] %(name)s >> %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
@@ -74,6 +74,9 @@ def make_general_cm(true_labels, pred_labels, pct=False, output_dict=False):
                     cmatrix[tlab_idx][plab_idx]/=tidx.shape[0]
     if output_dict:
         return cm
+    cmatrix = pd.DataFrame(cmatrix, columns=uniq_pred_labels, index=uniq_true_labels)
+    cmatrix = cmatrix.rename_axis("true labels", axis="index")
+    cmatrix = cmatrix.rename_axis("pred labels", axis="columns")
     return cmatrix
 
     

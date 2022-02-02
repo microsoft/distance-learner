@@ -17,6 +17,10 @@ from torch.utils.data import Dataset
 
 from ..single.sphere import *
 
+from utils import *
+
+logger = init_logger(__name__)
+
 class ConcentricSpheres(Dataset):
 
     def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
@@ -71,7 +75,9 @@ class ConcentricSpheres(Dataset):
         :param augment: whether to treat off-manifold points generated on-the-fly as augmentations
         :type augment: bool
         """
-    
+
+        if seed is not None: seed_everything(seed)
+
         self._N = N
         self._num_neg = num_neg
         self._n = n
@@ -116,6 +122,7 @@ class ConcentricSpheres(Dataset):
         self.all_actual_distances = None
         self.all_smooth_distances = None
         self.class_labels = None
+        self.pre_class_labels = None
 
         self.normed_all_points = self.all_points
         self.normed_all_distances = self.all_distances
@@ -296,7 +303,7 @@ class ConcentricSpheres(Dataset):
     def compute_points(self):
 
         tot_count_per_mfld = self._N // 2
-        neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None and not self.online else None
+        neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None else None
 
         s_gamma = 0.5 if self._gamma is 0 else self._gamma # gamma = 0 needed for concentric spheres but throws error with constituent spheres
         self.S1 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
@@ -306,18 +313,19 @@ class ConcentricSpheres(Dataset):
             off_online=self._off_online, augment=self._augment)
 
         self.S1.compute_points()
-        print("[ConcentricSpheres]: Generated S1")
+        logger.info("[ConcentricSpheres]: Generated S1")
         self._x_cn = self.S1.specattrs.x_cn
 
+        # `seed` is passed as `None` since we need not have same seed between the two spheres
         self.S2 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r + self._g, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
-            seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
+            seed=None, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
             normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
             off_online=self._off_online, augment=self._augment)
 
         self.S2.compute_points()
         assert (self._x_cn == self.S2.specattrs.x_cn).all() == True
-        print("[ConcentricSpheres]: Generated S2")
+        logger.info("[ConcentricSpheres]: Generated S2")
 
         self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
         
@@ -334,6 +342,14 @@ class ConcentricSpheres(Dataset):
         self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
         self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
         self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+
+        # pre-image class labels
+        # 2: no manifold; 0: S_1; 1: S_2
+        self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+        self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
+        self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+        self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
+        self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
         # true distances of points in S1 to S2 and vice versa are not available and marked `M`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
@@ -356,25 +372,26 @@ class ConcentricSpheres(Dataset):
 
         if self._normalize:
             self.norm()
-            print("[ConcentricSpheres]: Overall noramalization done")
+            logger.info("[ConcentricSpheres]: Overall noramalization done")
 
         self.get_all_points_k()
 
-    def resample_points(self, seed=42):
-
+    def resample_points(self, seed=42, no_op=False):
+        if no_op:
+            return None
         if seed is None:
-            print("[ConcentricSpheres]: No seed provided. proceeding with current seed")
+            logger.info("[ConcentricSpheres]: No seed provided. proceeding with current seed")
         else:
-            print("[ConcentricSpheres]: Re-sampling points with seed={}".format(seed))
+            logger.info("[ConcentricSpheres]: Re-sampling points with seed={}".format(seed))
             seed_everything(seed)
         
-        print("[ConcentricSpheres]: Starting re-sampling from S1")
+        logger.info("[ConcentricSpheres]: Starting re-sampling from S1")
         self.S1.resample_points()
-        print("[ConcentricSpheres]: Re-sampling from S1 done")
+        logger.info("[ConcentricSpheres]: Re-sampling from S1 done")
 
-        print("[ConcentricSpheres]: Starting re-sampling from S2")
+        logger.info("[ConcentricSpheres]: Starting re-sampling from S2")
         self.S2.resample_points()
-        print("[ConcentricSpheres]: Re-sampling from S2 done")
+        logger.info("[ConcentricSpheres]: Re-sampling from S2 done")
 
         self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
         
@@ -391,6 +408,14 @@ class ConcentricSpheres(Dataset):
         self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
         self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
         self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+
+        # pre-image class labels
+        # 2: no manifold; 0: S_1; 1: S_2
+        self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+        self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
+        self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+        self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
+        self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
         # true distances of points in S1 to S2 and vice versa are not available and marked `M`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
@@ -413,7 +438,7 @@ class ConcentricSpheres(Dataset):
 
         if self._normalize:
             self.norm(resample=True)
-            print("[ConcentricSpheres]: Re-sampling noramalization done")
+            logger.info("[ConcentricSpheres]: Re-sampling noramalization done")
 
         self.get_all_points_k()
 
@@ -622,13 +647,17 @@ class ConcentricSpheres(Dataset):
     @classmethod
     def make_train_val_test_splits(cls, cfg_dict=None, save_dir=None):
 
+        logger.info("[ConcentricSpheres]: starting with split generation")
         if cfg_dict is None:
             cfg_dict = cls.get_demo_cfg_dict()
 
+        logger.info("[ConcentricSpheres]: generating train set...")
         train_cfg = cfg_dict["train"]
         train_set = cls(**train_cfg)
         train_set.compute_points()
+        logger.info("[ConcentricSpheres]: train set generation done!")
 
+        logger.info("[ConcentricSpheres]: generating val set...")
         val_cfg = cfg_dict["val"]
         val_cfg["rotation"] = train_set.rotation
         val_cfg["translation"] = train_set.translation
@@ -636,7 +665,9 @@ class ConcentricSpheres(Dataset):
         val_cfg["norm_factor"] = train_set.norm_factor
         val_set = cls(**val_cfg)
         val_set.compute_points()
+        logger.info("[ConcentricSpheres]: val set generation done!")
 
+        logger.info("[ConcentricSpheres]: generating test set...")
         test_cfg = cfg_dict["test"]
         test_cfg["rotation"] = train_set.rotation
         test_cfg["translation"] = train_set.translation
@@ -644,10 +675,14 @@ class ConcentricSpheres(Dataset):
         test_cfg["norm_factor"] = train_set.norm_factor
         test_set = cls(**test_cfg)
         test_set.compute_points()
+        logger.info("[ConcentricSpheres]: test set generation done!")
+
 
         if save_dir is not None:
+            logger.info("[ConcentricSpheres]: saving splits at: {}".format(save_dir))
             cls.save_splits(train_set, val_set, test_set, save_dir)
-
+        
+        logger.info("[ConcentricSpheres]: generated splits!")
         return train_set, val_set, test_set
 
     @classmethod
@@ -698,9 +733,11 @@ class ConcentricSpheres(Dataset):
             "normed_points": self.normed_all_points[idx],
             "normed_distances": self.normed_all_distances[idx],
             "normed_actual_distances": self.normed_all_actual_distances[idx],
-            "classes": self.class_labels[idx]
+            "classes": self.class_labels[idx],
         }
 
+        if self.pre_class_labels is not None:
+            batch["pre_classes"] = self.pre_class_labels[idx]
         if self.all_smooth_distances is not None:
             batch["smooth_distances"] = self.all_smooth_distances[idx]
         if self.normed_all_smooth_distances is not None:

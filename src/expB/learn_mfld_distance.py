@@ -62,6 +62,7 @@ def seed_worker(worker_id):
     np.random.seed(worker_seed)
     random.seed(worker_seed)
 
+logger = init_logger("blah")
 
 
 def weighted_mse_loss(inp, target, weight):
@@ -253,8 +254,6 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
     
     for epoch in tqdm(range(num_epochs)):
         
-         
-
         logs = {
             "loss": 0,
             "val_loss": 0,
@@ -267,7 +266,22 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             all_targets = None
 
             dl = dataloaders[phase]
-            
+
+            if online and (phase == "train") and (epoch > 0):
+                dl.dataset.resample_points((10 * epoch) + (100 * num_epochs), no_op=True)
+                
+                # # for sanity check: ensuring resampling in a way to generate same samples everytime
+                # seed_everything(dl.dataset.seed)
+                # logger.info("seed set={}".format(dl.dataset.seed))
+                # # dummy translation
+                # np.random.normal(dl.dataset.mu, dl.dataset.sigma, dl.dataset.n)
+                # # dummy rotation
+                # tmp = np.random.normal(dl.dataset.mu, dl.dataset.sigma, size=(dl.dataset.n, dl.dataset.n))
+                # tmp = np.linalg.qr(tmp)[0]
+                # # dummy center
+                # np.random.normal(dl.dataset.mu, dl.dataset.sigma, dl.dataset.k)
+                # dl.dataset.resample_points(None)
+
             pred_classes = None
             target_classes = None
             
@@ -390,7 +404,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 for idx in range(all_logits.shape[1]):
                     writer.add_histogram(phase + "/S" + str(idx+1) + "/logits", all_logits[:, idx].reshape(-1), epoch)
             
-            if epoch == num_epochs - 1:
+            if epoch == num_epochs - 1 and task == "regression":
                 for idx in range(all_logits.shape[1]):
                     mask = np.abs(all_targets.numpy()[:, idx] - all_logits.numpy()[:, idx]) >= 5e-2
                     plt.scatter(all_targets.numpy()[mask, idx], all_logits.numpy()[mask, idx], s=0.01, c="red")
@@ -399,6 +413,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                     plt.ylabel("pred distance")
                     plt.title("gt vs. pred {}".format(target_name))
                     plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_S{}_{}.png".format(idx + 1, phase)))
+                    plt.clf()
 
                 mask = np.abs(all_targets.numpy().ravel() - all_logits.numpy().ravel()) >= 5e-2
                 plt.scatter(all_targets.numpy().ravel()[mask], all_logits.numpy().ravel()[mask], s=0.01, c="red")
@@ -407,11 +422,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 plt.ylabel("pred distance")
                 plt.title("gt vs. pred {}".format(target_name))
                 plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_all_{}.png".format(phase)))
-        
-        if online:
-            # tmp = {ph: DataLoader(dataloaders[ph].dataset, shuffle=True, num_workers=dataloaders[ph].num_workers, batch_size=dataloaders["i"].batch_size, worker_init_fn=lambda wid: seed_everything(2**(3*wid+ 2*epoch) + (1000%(3*wid+ 2*epoch + 1)))) for ph in dataloaders}
-            # dataloaders = tmp
-            dataloaders["train"].dataset.resample_points(epoch)
+                plt.clf()
 
         check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss or epoch == 100
         stat = "val_loss"

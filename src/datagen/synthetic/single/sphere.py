@@ -19,7 +19,6 @@ from .manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
 
 logger = init_logger(__name__)
 
-
 class SpecificSphereAttrs(SpecificManifoldAttrs):
 
     def __init__(self, mu=0, sigma=1, seed=42, n=100, r=0.5, x_ck=None, **kwargs):
@@ -117,8 +116,7 @@ class RandomSphere(Manifold, Dataset):
         """constructor for class containing a random sphere"""
 
         ## setting seed
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+        if seed is not None: seed_everything(seed)
 
         self._genattrs = genattrs
         self._specattrs = specattrs
@@ -134,7 +132,6 @@ class RandomSphere(Manifold, Dataset):
             self._specattrs = SpecificSphereAttrs(mu=self._genattrs.mu,\
                  sigma=self._genattrs.sigma, seed=self._genattrs.seed,\
                  n=self._genattrs.n, x_ck=x_ck, r=r)
-
 
     @property
     def genattrs(self):
@@ -335,6 +332,7 @@ class RandomSphere(Manifold, Dataset):
         elif pre_images is not None:
             random_idx = np.random.randint(self._genattrs.N - self._genattrs.num_neg,\
                  size=num_off_mfld_ex)
+            # logger.info(random_idx)
             self._genattrs.pre_images_k = pre_images[random_idx]
             return pre_images[random_idx]            
 
@@ -477,10 +475,10 @@ class RandomSphere(Manifold, Dataset):
         self.embed_in_n()
         logger.info("[RandomSphere]: embedded the sphere in n-dim space")
 
-        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
-        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
-        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float()
-        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float()
+        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float() if not torch.is_tensor(self._genattrs.points_n) else self._genattrs.points_n
+        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float() if not torch.is_tensor(self._genattrs.points_k) else self._genattrs.points_k
+        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float() if not torch.is_tensor(self._genattrs.distances) else self._genattrs.distances
+        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float() if not torch.is_tensor(self._genattrs.actual_distances) else self._genattrs.actual_distances
 
         if self._genattrs.normalize:
             self.norm()
@@ -503,10 +501,11 @@ class RandomSphere(Manifold, Dataset):
         self.embed_in_n(resample=True)
         logger.info("[RandomSphere]: embedded the sphere in n-dim space")
         
-        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
-        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
-        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float()
-        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float()
+        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float() if not torch.is_tensor(self._genattrs.points_n) else self._genattrs.points_n
+        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float() if not torch.is_tensor(self._genattrs.points_k) else self._genattrs.points_k
+        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float() if not torch.is_tensor(self._genattrs.distances) else self._genattrs.distances
+        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float() if not torch.is_tensor(self._genattrs.actual_distances) else self._genattrs.actual_distances
+
 
         if self._genattrs.normalize:
             self.norm(resample=True)
@@ -838,31 +837,42 @@ class RandomSphere(Manifold, Dataset):
     
     @classmethod
     def make_train_val_test_splits(cls, cfg_dict=None, save_dir=None):
+        
+        logger.info("[RandomSphere]: starting with split generation")
 
         if cfg_dict is None:
             cfg_dict = cls.get_demo_cfg_dict()
 
+        logger.info("[RandomSphere]: generating train set...")
         train_cfg = cfg_dict["train"]
         train_set = cls(**train_cfg)
         train_set.compute_points()
+        logger.info("[RandomSphere]: train set generation done!")
 
+        logger.info("[RandomSphere]: generating val set...")
         val_cfg = cfg_dict["val"]
         val_cfg["x_ck"] = train_set.specattrs.x_ck
         val_cfg["rotation"] = train_set.genattrs.rotation
         val_cfg["translation"] = train_set.genattrs.translation
         val_set = cls(**val_cfg)
         val_set.compute_points()
+        logger.info("[RandomSphere]: val set generation done!")
 
+        logger.info("[RandomSphere]: generating test set...")
         test_cfg = cfg_dict["test"]
         test_cfg["x_ck"] = train_set.specattrs.x_ck
         test_cfg["rotation"] = train_set.genattrs.rotation
         test_cfg["translation"] = train_set.genattrs.translation
         test_set = cls(**test_cfg)
         test_set.compute_points()
+        logger.info("[RandomSphere]: test set generation done!")
 
         if save_dir is not None:
+            logger.info("[RandomSphere]: saving splits at: {}".format(save_dir))
             cls.save_splits(train_set, val_set, test_set, save_dir)
+            logger.info("[RandomSphere]: splits saved")
 
+        logger.info("[RandomSphere]: generated splits!")
         return train_set, val_set, test_set
         
 

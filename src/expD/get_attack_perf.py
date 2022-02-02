@@ -65,13 +65,7 @@ from attacks import *
 ex = Experiment("get_attack_perfs", ingredients=[attack_ingredient, inpfn_ingredient])
 
 # set up a custom logger
-logger = logging.getLogger("expD")
-logger.handlers = []
-ch = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s -- [%(levelname).1s] %(name)s >> %(message)s', datefmt='%d-%m-%Y %H:%M:%S')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-logger.setLevel("INFO")
+logger = init_logger()
 
 # attach it to the experiment
 ex.logger = logger
@@ -90,11 +84,13 @@ def config(attack, input_files):
     use_split = "test" # data split to generate perturbations from
 
     th_analyze = np.arange(1e-2, 1.6e-1, 1e-2) # if model is distance learner, then thresholds to analyse performance
+    # th_analyze = np.array([1e-2])
     th_analyze = np.append(th_analyze, np.inf)
 
     debug = True
 
-    dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
+    # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
+    dump_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
 
 
@@ -202,12 +198,12 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         attack_param_dict["atk_routine"] = atk_routine
 
         result_parent_dir = os.path.join(run_dir, "attack_perf")
-        _log.info(result_tag)
+        # _log.info(result_tag)
         result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, atk_routine, eps, eps_iter, nb_iter, norm, restarts, verbose)
         _log.info("perturbed ex will be dumped in: {}".format(result_dir))
 
-        logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex = attack_model(dataloaders=dataloaders,\
-            model_fn=model_fn, attack_fn=attack_fn, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
+        logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex, all_targets = attack_model(dataloaders=dataloaders,\
+            model_fn=model_fn, attack_fn=attack_fn, atk_flavor=atk_flavor, atk_routine=atk_routine, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
             norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"])
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
@@ -216,11 +212,25 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
                 "logits_of_pb_ex": logits_of_pb_ex,
                 "all_pb_ex": all_pb_ex,
                 "all_deltas": all_deltas,
-                "logits_of_raw_ex": logits_of_raw_ex
+                "logits_of_raw_ex": logits_of_raw_ex,
+                "all_targets": all_targets
             }, out_fn)
 
-        result_entries, min_dist_to_pb_raw_vals, min_dist_to_pb_raw_idx = calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex,\
-             th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, run_config["ftname"], run_config["tgtname"])
+        result_entries, min_dist_to_pb_raw_vals, min_dist_to_pb_raw_idx = calc_attack_perf(
+            inp_dir=inp_dir, \
+            dataset=dataset, \
+            all_pb_ex=all_pb_ex, \
+            all_targets=all_targets, \
+            logits_of_pb_ex=logits_of_pb_ex, \
+            logits_of_raw_ex=logits_of_raw_ex, \
+            th_analyze=th_analyze, \
+            OFF_MFLD_LABEL=OFF_MFLD_LABEL, \
+            attack_param_dict=attack_param_dict, \
+            data_param_dict=data_param_dict, \
+            task=task, \
+            ftname=run_config["ftname"], \
+            tgtname=run_config["tgtname"], \
+            result_dir=result_dir)
         result_container.extend(result_entries)
 
         if not debug:
@@ -233,9 +243,18 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     return result_container
     
 @ex.capture
-def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw_ex, th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, ftname, tgtname):
+def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, logits_of_raw_ex,\
+     th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, ftname, tgtname, result_dir, use_split, _log):
 
     results = list()
+
+    if task == "dist":
+        distance_scatter_plot_dir = os.path.join(result_dir, "distance_scatter_plots_{}".format(use_split))
+        os.makedirs(distance_scatter_plot_dir, exist_ok=True)
+    abs_cm_plot_dir = os.path.join(result_dir, "abs_cm_plots_{}".format(use_split))
+    os.makedirs(abs_cm_plot_dir, exist_ok=True)
+    pct_cm_plot_dir = os.path.join(result_dir, "pct_cm_plots_{}".format(use_split))
+    os.makedirs(pct_cm_plot_dir, exist_ok=True)
 
     onmfld_pts = dataset.normed_all_points[dataset.class_labels != OFF_MFLD_LABEL]
 
@@ -249,71 +268,231 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, logits_of_pb_ex, logits_of_raw
     min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx = get_closest_onmfld_pt(onmfld_pts, all_pb_ex)
 
     if task != "dist":
+        # _log.info("what is task here?: {}".format(task))
+        # _log.info("what is task != 'dist': {}".format(task != "dist"))
+
+        # for normal examples (will be helpful for comparison)
         true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
         pred_classes = torch.max(logits_of_raw_ex, dim=1)[1]
 
         clf_report = classification_report(true_classes, pred_classes, output_dict=True)
-        raw_cm = make_general_cm(true_classes, pred_classes, output_dict=False)
-        pct_cm = make_general_cm(true_classes, pred_classes, pct=True, output_dict=False)
+        abs_cm = make_general_cm(true_classes, pred_classes, output_dict=False)
+        abs_cm_fn = os.path.join(abs_cm_plot_dir, "abs_cm_{}.csv".format(use_split))
+        abs_cm.to_csv(abs_cm_fn)
+        pct_cm = make_general_cm(true_classes, pred_classes, pct=True, output_dict=False)        
+        pct_cm_fn = os.path.join(pct_cm_plot_dir, "pct_cm_{}.csv".format(use_split))
+        pct_cm_fn.to_csv(pct_cm_fn)
 
+
+        # for adversarial examples
         adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
-        assert (adv_true_classes == true_classes).all()
+        # assert (adv_true_classes == true_classes).all()
         adv_pred_classes = torch.max(logits_of_pb_ex, dim=1)[1]
 
-        clf_report = classification_report(true_classes, pred_classes, output_dict=True)
-        raw_cm = make_general_cm(true_classes, pred_classes, output_dict=False)
-        pct_cm = make_general_cm(true_classes, pred_classes, pct=True, output_dict=False)
+        adv_clf_report = classification_report(adv_true_classes, adv_pred_classes, output_dict=True)
+        adv_abs_cm = make_general_cm(adv_true_classes, adv_pred_classes, output_dict=False)
+        adv_abs_cm_fn = os.path.join(abs_cm_plot_dir, "adv_abs_cm_{}.csv".format(use_split))
+        adv_abs_cm.to_csv(adv_abs_cm_fn)
+        adv_pct_cm = make_general_cm(adv_true_classes, adv_pred_classes, pct=True, output_dict=False)
+        adv_pct_cm_fn = os.path.join(pct_cm_plot_dir, "adv_pct_cm_{}.csv".format(use_split))
+        adv_pct_cm.to_csv(adv_pct_cm_fn)
 
+        # form the result entry
         result_entry = attack_param_dict
         result_entry.update(**data_param_dict)
+
         stat_dict = {
             "inp_dir": inp_dir,
             "task": task,
             "ftname": ftname,
             "tgtname": tgtname,
             "thresh": np.nan,
+            "adv_clf_report": adv_clf_report,
+            "adv_abs_cm": adv_abs_cm_fn,
+            "adv_pct_cm": adv_pct_cm_fn,
             "clf_report": clf_report,
-            "raw_cm": raw_cm,
-            "pct_cm": pct_cm 
+            "abs_cm": abs_cm_fn,
+            "pct_cm": pct_cm_fn,
+            "distance_sct_plt": None
         }
         result_entry.update(**stat_dict)
         results.append(result_entry)
 
-    else:
+        # plot the confusion matrices
+        sns.heatmap(abs_cm, annot=True)
+        plt.ylabel("True Labels")
+        plt.xlabel("Pred Labels")
+        plt.title("Abs CM")
+        plt.savefig(os.path.join(abs_cm_plot_dir, "abs_cm_{}.png".format(use_split)))
+        plt.clf()
+        _log.info("abs confusion matrices written to: {}".format(abs_cm_plot_dir))
 
+        sns.heatmap(pct_cm, annot=True)
+        plt.ylabel("True Labels")
+        plt.xlabel("Pred Labels")
+        plt.title("Percentage CM")
+        plt.savefig(os.path.join(pct_cm_plot_dir, "pct_cm_{}.png".format(use_split)))
+        plt.clf()
+        _log.info("pct confusion matrices written to: {}".format(pct_cm_plot_dir))
+        
+        sns.heatmap(adv_abs_cm, annot=True)
+        plt.ylabel("True Labels")
+        plt.xlabel("Pred Labels")
+        plt.title("Adv Abs CM")
+        plt.savefig(os.path.join(abs_cm_plot_dir, "adv_abs_cm_{}.png".format(use_split)))
+        plt.clf()
+        _log.info("abs confusion matrices written to: {}".format(abs_cm_plot_dir))
+
+        sns.heatmap(adv_pct_cm, annot=True)
+        plt.ylabel("True Labels")
+        plt.xlabel("Pred Labels")
+        plt.title("Adv Percentage CM")
+        plt.savefig(os.path.join(pct_cm_plot_dir, "adv_pct_cm_{}.png".format(use_split)))
+        plt.clf()
+        _log.info("pct confusion matrices written to: {}".format(pct_cm_plot_dir))
+
+    else:
 
         for th in th_analyze:
             
-            adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
-            adv_true_classes[min_dist_pb_to_raw_vals > th] = OFF_MFLD_LABEL
+            # for normal examples (will be helpful for comparison)
+            true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
             pred_classes = torch.min(logits_of_raw_ex, dim=1)[1]
             pred_classes[torch.min(logits_of_raw_ex, dim=1)[0] > th] = OFF_MFLD_LABEL
 
-            clf_report = classification_report(adv_true_classes, pred_classes, output_dict=True)
-            raw_cm = make_general_cm(adv_true_classes, pred_classes, output_dict=False)
-            pct_cm = make_general_cm(adv_true_classes, pred_classes, pct=True, output_dict=False)
+            clf_report = classification_report(true_classes, pred_classes, output_dict=True)
+            abs_cm = make_general_cm(true_classes, pred_classes, output_dict=False)
+            abs_cm_fn = os.path.join(abs_cm_plot_dir, "abs_cm_{}_th={}.csv".format(use_split, th))
+            abs_cm.to_csv(abs_cm_fn)
+            pct_cm = make_general_cm(true_classes, pred_classes, pct=True, output_dict=False)        
+            pct_cm_fn = os.path.join(pct_cm_plot_dir, "pct_cm_{}_th={}.csv".format(use_split, th))
+            pct_cm.to_csv(pct_cm_fn)
 
+
+            # for adversarial examples
+            adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
+            adv_true_preclasses = adv_true_classes.clone()
+            adv_true_classes[min_dist_pb_to_raw_vals > th] = OFF_MFLD_LABEL
+            adv_pred_classes = torch.min(logits_of_pb_ex, dim=1)[1]
+            adv_pred_classes[torch.min(logits_of_pb_ex, dim=1)[0] > th] = OFF_MFLD_LABEL
+
+            adv_clf_report = classification_report(adv_true_classes, adv_pred_classes, output_dict=True)
+            adv_abs_cm = make_general_cm(adv_true_classes, adv_pred_classes, output_dict=False)
+            adv_abs_cm_fn = os.path.join(abs_cm_plot_dir, "adv_abs_cm_{}_th={}.csv".format(use_split, th))
+            adv_abs_cm.to_csv(adv_abs_cm_fn)
+            adv_pct_cm = make_general_cm(adv_true_classes, adv_pred_classes, pct=True, output_dict=False)
+            adv_pct_cm_fn = os.path.join(pct_cm_plot_dir, "adv_pct_cm_{}_th={}.csv".format(use_split, th))
+            adv_pct_cm.to_csv(adv_pct_cm_fn)
+
+            # forming result entry
             result_entry = attack_param_dict
             result_entry.update(**data_param_dict)
             stat_dict = {
+                "inp_dir": inp_dir,
                 "task": task,
                 "ftname": ftname,
                 "tgtname": tgtname,
                 "thresh": th,
+                "adv_clf_report": adv_clf_report,
+                "adv_abs_cm": adv_abs_cm_fn,
+                "adv_pct_cm": adv_pct_cm_fn,
                 "clf_report": clf_report,
-                "raw_cm": raw_cm,
-                "pct_cm": pct_cm 
+                "abs_cm": abs_cm_fn,
+                "pct_cm": pct_cm_fn,
+                "distance_sct_plt": os.path.join(distance_scatter_plot_dir, "pred_vs_gt_dists_all_{}_th={}.png".format(use_split, th))
             }
             result_entry.update(**stat_dict)
             results.append(result_entry)
+
+            # plot the distance scatter plot
+
+            def plot_distance_scatter_plot(logits, targets, target_name, save_dir, th, tol=5e-2):
+                with sns.axes_style("whitegrid"):
+                    for idx in range(logits.shape[1]):
+                        mask = np.abs(targets.numpy()[:, idx] - logits.numpy()[:, idx]) >= tol
+                        plt.scatter(targets.numpy()[mask, idx], logits.numpy()[mask, idx], s=0.01, c="red")
+                        plt.scatter(targets.numpy()[np.logical_not(mask), idx], logits.numpy()[np.logical_not(mask), idx], s=0.01, c="green")
+                        # plt.plot(targets.numpy()[:, idx], targets.numpy()[:, idx])
+                        # plt.plot(targets.numpy()[:, idx], targets.numpy()[:, idx] + th)
+                        # plt.plot(targets.numpy()[:, idx], targets.numpy()[:, idx] - th)
+                        if th < np.inf:
+                            plt.axvline(x = th, color = 'b', label = 'th={}'.format(th))
+                            plt.axhline(y = th, color = 'b', label = 'th={}'.format(th))
+                        plt.gca().set_ylim(bottom=0)
+                        plt.gca().set_xticks(np.arange(0, 1.1, 0.1))
+                        plt.gca().set_yticks(np.arange(0, 1.1, 0.1))
+                        plt.xlabel("gt distance ({})".format(target_name))
+                        plt.ylabel("pred distance")
+                        plt.title("gt vs. pred {}".format(target_name))
+                        plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_S{}_{}_th={}.png".format(idx + 1, use_split, th)))
+                        plt.clf()
+
+                    mask = np.abs(targets.numpy().ravel() - logits.numpy().ravel()) >= 5e-2
+                    plt.scatter(targets.numpy().ravel()[mask], logits.numpy().ravel()[mask], s=0.01, c="red")
+                    plt.scatter(targets.numpy().ravel()[np.logical_not(mask)], logits.numpy().ravel()[np.logical_not(mask)], s=0.01, c="green")
+                    # plt.plot(targets.numpy().ravel(), targets.numpy().ravel())
+                    # plt.plot(targets.numpy().ravel(), targets.numpy().ravel() + th)
+                    # plt.plot(targets.numpy().ravel(), targets.numpy().ravel() - th)
+                    if th < np.inf:
+                        plt.axvline(x = th, color = 'b', label = 'th={}'.format(th))
+                        plt.axhline(y = th, color = 'b', label = 'th={}'.format(th))
+                    plt.gca().set_ylim(bottom=0)
+                    plt.gca().set_xticks(np.arange(0, 1.1, 0.1))
+                    plt.gca().set_yticks(np.arange(0, 1.1, 0.1))
+                    plt.xlabel("gt distance ({})".format(target_name))
+                    plt.ylabel("pred distance")
+                    plt.title("gt vs. pred {}".format(target_name))
+                    plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_all_{}_th={}.png".format(use_split, th)))
+                    plt.clf()
+
+            targets_of_pb_ex = torch.zeros_like(logits_of_pb_ex)
+            targets_of_pb_ex[np.arange(targets_of_pb_ex.shape[0]), adv_true_preclasses] = min_dist_pb_to_raw_vals
+            targets_of_pb_ex[np.arange(targets_of_pb_ex.shape[0]), ~adv_true_preclasses] = dataset.M
+            plot_distance_scatter_plot(logits_of_pb_ex, targets_of_pb_ex, tgtname, distance_scatter_plot_dir, th, tol=5e-2)
+            _log.info("distance scatter plots written to: {}".format(distance_scatter_plot_dir))
+
+            # plot the confusion matrices
+            sns.heatmap(abs_cm, annot=True)
+            plt.ylabel("True Labels")
+            plt.xlabel("Pred Labels")
+            plt.title("Abs CM")
+            plt.savefig(os.path.join(abs_cm_plot_dir, "abs_cm_{}_th={}.png".format(use_split, th)))
+            plt.clf()
+            _log.info("abs confusion matrices written to: {}".format(abs_cm_plot_dir))
+
+            sns.heatmap(adv_pct_cm, annot=True)
+            plt.ylabel("True Labels")
+            plt.xlabel("Pred Labels")
+            plt.title("Percentage CM")
+            plt.savefig(os.path.join(pct_cm_plot_dir, "pct_cm_{}_th={}.png".format(use_split, th)))
+            plt.clf()
+            _log.info("pct confusion matrices written to: {}".format(pct_cm_plot_dir))
+
+            sns.heatmap(adv_abs_cm, annot=True)
+            plt.ylabel("True Labels")
+            plt.xlabel("Pred Labels")
+            plt.title("Raw CM")
+            plt.savefig(os.path.join(abs_cm_plot_dir, "adv_raw_cm_{}_th={}.png".format(use_split, th)))
+            plt.clf()
+            _log.info("adv abs confusion matrices written to: {}".format(abs_cm_plot_dir))
+
+            sns.heatmap(adv_pct_cm, annot=True)
+            plt.ylabel("True Labels")
+            plt.xlabel("Pred Labels")
+            plt.title("Percentage CM")
+            plt.savefig(os.path.join(pct_cm_plot_dir, "adv_pct_cm_{}_th={}.png".format(use_split, th)))
+            plt.clf()
+            _log.info("adv pct confusion matrices written to: {}".format(pct_cm_plot_dir))
     
     return results, min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx
 
 
 @ex.capture
-def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname):
+def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname):
 
     _log.info("logging attack parameters")
+    _log.info("atk_flavor={}".format(atk_flavor))
+    _log.info("atk_routine={}".format(atk_routine))
     _log.info("eps={}".format(eps))
     _log.info("eps_iter={}".format(eps_iter))
     _log.info("nb_iter={}".format(nb_iter))
@@ -335,6 +514,10 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     
     all_deltas = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
     all_pb_ex = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
+
+    all_targets = torch.zeros(num_onmfld, num_classes)
+    if task == "clf":
+        all_targets = torch.zeros(num_onmfld).long()
 
     start = end = 0
 
@@ -361,13 +544,23 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
         x = inputs
         y = targets
 
-        adv_x = attack_fn(model_fn=model_fn, x=x, y=y,\
+        adv_x = None
+        if atk_routine == "chans":
+            adv_x = attack_fn(model_fn=model_fn, x=x, y=y,\
              eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
-             verbose=verbose, norm=norm, restarts=restarts)
+             norm=norm)
+        else:
+            adv_x = attack_fn(model_fn=model_fn, x=x, y=y,\
+                eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
+                verbose=verbose, norm=norm, restarts=restarts)
+
         delta = adv_x - x
-        
+        # if task == "clf" and atk_routine == "chans":
+        #     _log.info("shape of all_pb_ex: {}".format(all_pb_ex.shape))
+        #     _log.info("shape of adv_x: {}".format(adv_x.shape))
         all_deltas[start:end] = delta
         all_pb_ex[start:end] = adv_x
+        all_targets[start:end] = targets
 
         with torch.no_grad():
             model_fn.eval()
@@ -385,7 +578,8 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
         logits_of_pb_ex,
         all_pb_ex,
         all_deltas,
-        logits_of_raw_ex
+        logits_of_raw_ex,
+        all_targets
     )
 
 @ex.capture
@@ -416,7 +610,7 @@ def main(attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log, _run):
     os.makedirs(dump_dir, exist_ok=True)
     result_fn = os.path.join(dump_dir, _run._id, "all_attack_perfs.json")
     with open(result_fn, "w") as f:
-        json.dump(all_results, result_fn)
+        json.dump(all_results, f)
 
     _log.info("result file created at: {}".format(result_fn))
     

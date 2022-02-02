@@ -427,7 +427,7 @@ class Manifold(ABC):
         neg_examples = (neg_norms.reshape(-1, 1) / np.linalg.norm(neg_examples, axis=1, ord=2).reshape(-1, 1)) * neg_examples
 
         # add position vector of $p$ to get origin centered coordinates
-        neg_examples[:, :self._genattrs.k] = neg_examples[:, :self._genattrs.k] + self._genattrs.pre_images_k
+        neg_examples[:, :self._genattrs.k] = neg_examples[:, :self._genattrs.k] + np.array(self._genattrs.pre_images_k)
 
         # distances from the manifold will be the norms the samples were rescaled by
         neg_distances = neg_norms
