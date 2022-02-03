@@ -10,6 +10,7 @@ import json
 import copy
 import time
 import copy
+import shutil
 import random
 import logging
 
@@ -88,6 +89,7 @@ def config(attack, input_files):
     th_analyze = np.append(th_analyze, np.inf)
 
     debug = True
+    clean = False
 
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
     dump_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
@@ -281,7 +283,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         abs_cm.to_csv(abs_cm_fn)
         pct_cm = make_general_cm(true_classes, pred_classes, pct=True, output_dict=False)        
         pct_cm_fn = os.path.join(pct_cm_plot_dir, "pct_cm_{}.csv".format(use_split))
-        pct_cm_fn.to_csv(pct_cm_fn)
+        pct_cm.to_csv(pct_cm_fn)
 
 
         # for adversarial examples
@@ -313,7 +315,8 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             "clf_report": clf_report,
             "abs_cm": abs_cm_fn,
             "pct_cm": pct_cm_fn,
-            "distance_sct_plt": None
+            "distance_sct_plt": None,
+            "result_dir": result_dir
         }
         result_entry.update(**stat_dict)
         results.append(result_entry)
@@ -399,7 +402,8 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
                 "clf_report": clf_report,
                 "abs_cm": abs_cm_fn,
                 "pct_cm": pct_cm_fn,
-                "distance_sct_plt": os.path.join(distance_scatter_plot_dir, "pred_vs_gt_dists_all_{}_th={}.png".format(use_split, th))
+                "distance_sct_plt": os.path.join(distance_scatter_plot_dir, "pred_vs_gt_dists_all_{}_th={}.png".format(use_split, th)),
+                "result_dir": result_dir
             }
             result_entry.update(**stat_dict)
             results.append(result_entry)
@@ -441,7 +445,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
                     plt.gca().set_yticks(np.arange(0, 1.1, 0.1))
                     plt.xlabel("gt distance ({})".format(target_name))
                     plt.ylabel("pred distance")
-                    plt.title("gt vs. pred {}".format(target_name))
+                    plt.title("gt vs. pred {}, th={}".format(target_name, th))
                     plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_all_{}_th={}.png".format(use_split, th)))
                     plt.clf()
 
@@ -455,7 +459,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             sns.heatmap(abs_cm, annot=True)
             plt.ylabel("True Labels")
             plt.xlabel("Pred Labels")
-            plt.title("Abs CM")
+            plt.title("Abs CM th={}".format(th))
             plt.savefig(os.path.join(abs_cm_plot_dir, "abs_cm_{}_th={}.png".format(use_split, th)))
             plt.clf()
             _log.info("abs confusion matrices written to: {}".format(abs_cm_plot_dir))
@@ -463,7 +467,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             sns.heatmap(adv_pct_cm, annot=True)
             plt.ylabel("True Labels")
             plt.xlabel("Pred Labels")
-            plt.title("Percentage CM")
+            plt.title("Percentage CM th={}".format(th))
             plt.savefig(os.path.join(pct_cm_plot_dir, "pct_cm_{}_th={}.png".format(use_split, th)))
             plt.clf()
             _log.info("pct confusion matrices written to: {}".format(pct_cm_plot_dir))
@@ -471,7 +475,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             sns.heatmap(adv_abs_cm, annot=True)
             plt.ylabel("True Labels")
             plt.xlabel("Pred Labels")
-            plt.title("Raw CM")
+            plt.title("Raw CM th={}".format(th))
             plt.savefig(os.path.join(abs_cm_plot_dir, "adv_raw_cm_{}_th={}.png".format(use_split, th)))
             plt.clf()
             _log.info("adv abs confusion matrices written to: {}".format(abs_cm_plot_dir))
@@ -479,7 +483,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             sns.heatmap(adv_pct_cm, annot=True)
             plt.ylabel("True Labels")
             plt.xlabel("Pred Labels")
-            plt.title("Percentage CM")
+            plt.title("Percentage CM th={}".format(th))
             plt.savefig(os.path.join(pct_cm_plot_dir, "adv_pct_cm_{}_th={}.png".format(use_split, th)))
             plt.clf()
             _log.info("adv pct confusion matrices written to: {}".format(pct_cm_plot_dir))
@@ -583,14 +587,18 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     )
 
 @ex.capture
-def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log):
+def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log):
+    
+    sep_results_for_all_runs_dir = os.path.join(dump_dir, "all_attack_perfs")
+    os.makedirs(sep_results_for_all_runs_dir, exist_ok=True)
+    
     all_results = list()
     run_parent_dirs = list()
     dataloaders = None
     for inp_dir in inp_files:
         parent_dir = os.path.abspath(os.path.join(inp_dir, os.pardir))
+        run_config = load_run_config(inp_dir)
         if parent_dir not in run_parent_dirs or dataloaders is None:
-            run_config = load_run_config(inp_dir)
             _log.info("loading data for run from parent directory: {} ...".format(parent_dir))
             dataloaders = load_data_for_run(parent_dir, run_config)
             _log.info("data loaded")
@@ -598,19 +606,49 @@ def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _lo
         else:
             _log.info("data was loaded for a previous run")
         result_container = attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, dataloaders=dataloaders)    
+        
+        run_task = run_config["task"]
+        run_data_tag = run_config["data"]["data_tag"]
+        run_result_tag = run_data_tag + "-" + run_task + ".json"
+        result_for_run_fn = os.path.join(sep_results_for_all_runs_dir, run_result_tag)
+        
+        _log.info("saving result for run in: {}".format(result_for_run_fn))
+        if os.path.exists(result_for_run_fn):
+            _log.info("result file for run exists. loading...")
+            with open(result_for_run_fn) as f:
+                _log.info("result file for run loaded. adding new results...")
+                result_container.extend(json.load(f))
+        with open(result_for_run_fn, "w") as f:
+            json.dump(result_container, f)
+            _log.info("result file for run saved!")
         all_results.extend(result_container)
     return all_results
 
+@ex.capture
+def clean_incorrect_dumps(_log, inp_files):
+    for inp_dir in inp_files:
+        attack_perf_result_dir = os.path.join(inp_dir, "attack_perf")
+        try:
+            shutil.rmtree(attack_perf_result_dir)
+            _log.info("removed directory: {}".format(attack_perf_result_dir))
+        except:
+            _log.info("could not remove directory: {}".format(attack_perf_result_dir))
+       
+
 @ex.automain
-def main(attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log, _run):
+def main(attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, clean, _log, _run):
 
     inp_files = get_inp_fn()
-    all_results = attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log)
-    _log.info("dump dir: {}".format(dump_dir))
-    os.makedirs(dump_dir, exist_ok=True)
-    result_fn = os.path.join(dump_dir, _run._id, "all_attack_perfs.json")
-    with open(result_fn, "w") as f:
-        json.dump(all_results, f)
+    if not clean:
+        all_results = attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log)
+        _log.info("dump dir: {}".format(dump_dir))
+        os.makedirs(dump_dir, exist_ok=True)
+        result_fn = os.path.join(dump_dir, _run._id, "all_attack_perfs_collated.json")
+        with open(result_fn, "w") as f:
+            json.dump(all_results, f)
 
-    _log.info("result file created at: {}".format(result_fn))
+        _log.info("result file created at: {}".format(result_fn))
+    else:
+        clean_incorrect_dumps(_log=_log, inp_files=inp_files)
+
     
