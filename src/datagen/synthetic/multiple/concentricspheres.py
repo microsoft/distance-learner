@@ -602,7 +602,10 @@ class ConcentricSpheres(Dataset):
         with open(specs_fn, "w+") as f:
             json.dump(specs_attrs, f)
 
-        torch.save(data_attrs, data_fn)
+        try:
+            torch.save(data_attrs, data_fn)
+        except:
+            logger.info("[ConcentricSpheres]: dataset could not be saved!")
 
         self.S1.save_data(S1_dir)
         self.S2.save_data(S2_dir)
@@ -693,7 +696,10 @@ class ConcentricSpheres(Dataset):
     
         if save_dir is not None:
             os.makedirs(train_dir, exist_ok=True)
-            train_set.save_data(train_dir)
+            try:
+                train_set.save_data(train_dir)
+            except:
+                logger.info("[ConcentricSpheres]: train set could not be saved!")
             os.makedirs(val_dir, exist_ok=True)
             val_set.save_data(val_dir)
             os.makedirs(test_dir, exist_ok=True)
@@ -707,7 +713,10 @@ class ConcentricSpheres(Dataset):
         train_dir = os.path.join(dump_dir, "train")
         os.makedirs(train_dir, exist_ok=True)
         train_set = cls()
-        train_set.load_data(train_dir)
+        try:
+            train_set.load_data(train_dir)
+        except:
+            train_set = None
 
         val_dir = os.path.join(dump_dir, "val")
         os.makedirs(val_dir, exist_ok=True)

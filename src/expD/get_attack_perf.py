@@ -75,7 +75,7 @@ ex.logger = logger
 @ex.config
 def config(attack, input_files):
 
-    cuda = 1
+    cuda = 0
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
 
     num_workers = 8
@@ -128,10 +128,12 @@ def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers):
     train_set, val_set, test_set = data_class.load_splits(data_dir)
 
     dataloaders = {
-        "train": DataLoader(dataset=train_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
         "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
         "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
     }
+    if train_set is not None:
+        dataloaders["train"] = DataLoader(dataset=train_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+    
 
     return dataloaders
 
@@ -161,7 +163,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     task = "dist" if run_config["task"] == "regression" else "clf"
     _log.info("task: {}".format(task))
     _log.info("ftname: {}".format(run_config["ftname"]))
-    _log.info("ftname: {}".format(run_config["tgtname"]))
+    _log.info("tgtname: {}".format(run_config["tgtname"]))
 
 
     dataset = dataloaders[use_split].dataset
@@ -300,7 +302,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         adv_pct_cm.to_csv(adv_pct_cm_fn)
 
         # form the result entry
-        result_entry = attack_param_dict
+        result_entry = copy.deepcopy(attack_param_dict)
         result_entry.update(**data_param_dict)
 
         stat_dict = {

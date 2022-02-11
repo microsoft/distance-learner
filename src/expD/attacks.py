@@ -114,7 +114,7 @@ def pgd_l2_cls(model_fn, x, y, eps=0.1, eps_iter=0.1, nb_iter=40, verbose=False,
     for t in range(nb_iter):
         loss = nn.CrossEntropyLoss()(model_fn(x + delta), y)
         loss.backward()
-        losses.append(loss.cpu().detach().item())
+        if verbose: losses.append(loss.cpu().detach().item())
         delta.data += alpha*delta.grad.detach() / norms(delta.grad.detach(), 2)
         # delta.data = torch.min(torch.max(delta.detach(), -X), 1-X) # clip X+delta to [0,1]
         delta.data *= eps / norms(delta.detach()).clamp(min=eps)
