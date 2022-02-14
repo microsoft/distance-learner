@@ -569,7 +569,12 @@ class ConcentricSpheres(Dataset):
             if attr in ["S1", "S2"]:
                 continue
             if attr in attrs:
-                setattr(self, attr, attrs[attr])
+                if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
+                    data_attr = torch.load(attrs[attr]["path"])
+                    logger.info("data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                    setattr(self, attr, data_attr)
+                else:
+                    setattr(self, attr, attrs[attr])
 
         self.S1 = RandomSphere()
         self.S1.load_data(S1_dump)
@@ -597,7 +602,10 @@ class ConcentricSpheres(Dataset):
             if not isinstance(attr_set[attr], Iterable):
                 specs_attrs[attr] = attr_set[attr]                
             else:
-                data_attrs[attr] = attr_set[attr]
+                attr_fn = os.path.join(save_dir, attr + ".pkl")
+                torch.save(attr_set[attr], attr_fn)
+                logger.info("data attribute ({}) saved to: {}".format(attr, attr_fn))
+                data_attrs[attr] = {"is_data_attr": True, "path": attr_fn}
 
         with open(specs_fn, "w+") as f:
             json.dump(specs_attrs, f)
