@@ -1,408 +1,17 @@
 # Commands for replicating dataset for "The Relationship Between High-Dimensional Geometry and Adversarial Examples"
 
-First run the Distance Learner for the dataset that is similar to the one given in tha paper:
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500_noninfsmoothdist \
- data.data_params.train.N=1000000 \
- data.data_params.train.k=500 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.max_norm=0.1 \
- data.data_params.train.bp=0.09 \
- data.data_params.train.M=1.0 \
- data.data_params.train.D=0.07 \
- data.data_params.train.norm_factor=1 \
- data.data_params.val.k=500 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.max_norm=0.1 \
- data.data_params.val.bp=0.09 \
- data.data_params.val.M=1.0 \
- data.data_params.val.D=0.07 \
- data.data_params.val.norm_factor=1 \
- data.data_params.test.k=500 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.max_norm=0.1 \
- data.data_params.test.bp=0.09 \
- data.data_params.test.M=1.0 \
- data.data_params.test.D=0.07 \
- data.data_params.test.norm_factor=1 \
- model.input_size=500 \
- data.generate=False \
- task=regression
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=300 cooldown=299 lr=1e-5 model.hidden_sizes=[1024,1024] model.model_type=mlp-norm \
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500_noninfdist_moreoffmfld \
- data.data_params.train.N=1000000 \
- data.data_params.train.num_neg=600000 \
- data.data_params.train.k=500 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.1 \
- data.data_params.train.D=0.07 \
- data.data_params.val.k=500 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.1 \
- data.data_params.val.D=0.07 \
- data.data_params.test.k=500 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.1 \
- data.data_params.test.D=0.07 \
- model.input_size=500 \
- data.generate=False \
- task=clf \
- train_on_onmfld=True
-```
-
-
-
-
+First run the Distance Learner for the dataset that is similar to the one given in the paper:
 
 
 ```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- model.hidden_sizes=[256,256,256,256] \
+python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse cuda=1 tgtname=normed_actual_distances \
  data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=500 \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfld_lrsweeps \
+ data.data_params.train.k=50 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=500 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=500 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=False \
- task=regression
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- model.hidden_sizes=[1024,1024] \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=500 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=500 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=500 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=False \
- task=clf \
- train_on_onmfld=True
-```
-
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k5n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=5 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=5 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=5 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=True \
- task=regression
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k5n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=5 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=5 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=5 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=False \
- task=clf \
- train_on_onmfld=True
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k10n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=10 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=10 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=10 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=True \
- task=regression
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k10n500 \
- data.data_params.train.N=200000 \
- data.data_params.train.k=10 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.15 \
- data.data_params.train.D=0.075 \
- data.data_params.val.k=10 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.15 \
- data.data_params.val.D=0.075 \
- data.data_params.test.k=10 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.15 \
- data.data_params.test.D=0.075 \
- model.input_size=500 \
- data.generate=False \
- task=clf \
- train_on_onmfld=True
-```
-
-
-
-=====
-
-```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=300 cooldown=299 lr=1e-5 debug=False loss_func=std_mse\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k100n500_noninfdist_moreoffmfld \
- data.data_params.train.N=1000000 \
- data.data_params.train.num_neg=600000 \
- data.data_params.train.k=100 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.g=0.3 \
- data.data_params.train.gamma=0 \
- data.data_params.train.norm_factor=1 \
- data.data_params.train.max_norm=0.1 \
- data.data_params.train.D=0.07 \
- data.data_params.val.k=100 \
- data.data_params.val.n=500 \
- data.data_params.val.r=1 \
- data.data_params.val.g=0.3 \
- data.data_params.val.N=200000 \
- data.data_params.val.gamma=0 \
- data.data_params.val.norm_factor=1 \
- data.data_params.val.max_norm=0.1 \
- data.data_params.val.D=0.07 \
- data.data_params.test.k=100 \
- data.data_params.test.n=500 \
- data.data_params.test.r=1 \
- data.data_params.test.g=0.3 \
- data.data_params.test.N=200000 \
- data.data_params.test.gamma=0 \
- data.data_params.test.norm_factor=1 \
- data.data_params.test.max_norm=0.1 \
- data.data_params.test.D=0.07 \
- model.input_size=500 \
- data.generate=True \
- task=regression
- ```
-
-
- ```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse\
- data.logdir=/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/ \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_notppr_k3n500_noninfsmoothdist \
- data.data_params.train.N=1000000 \
- data.data_params.train.k=3 \
- data.data_params.train.n=500 \
- data.data_params.train.r=80 \
- data.data_params.train.g=40 \
- data.data_params.train.max_norm=15 \
- data.data_params.train.bp=10 \
- data.data_params.train.M=150 \
- data.data_params.train.D=10 \
- data.data_params.val.k=3 \
- data.data_params.val.n=500 \
- data.data_params.val.r=80 \
- data.data_params.val.g=40 \
- data.data_params.val.N=200000 \
- data.data_params.val.max_norm=15 \
- data.data_params.val.bp=10 \
- data.data_params.val.M=150 \
- data.data_params.val.D=10 \
- data.data_params.test.k=2 \
- data.data_params.test.n=500 \
- data.data_params.test.r=80 \
- data.data_params.test.g=40 \
- data.data_params.test.N=200000 \
- data.data_params.test.max_norm=15 \
- data.data_params.test.bp=10 \
- data.data_params.test.M=150 \
- data.data_params.test.D=10 \
- model.input_size=500 \
- data.generate=True \
- task=regression
-```
-
-```bash
-python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=1e-5 debug=False loss_func=std_mse cuda=1 tgtname=normed_actual_distances \
- data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k2n500_noninfdist_moreoffmfldv2 \
- data.data_params.train.k=2 \
- data.data_params.train.n=500 \
- data.data_params.train.r=1 \
- data.data_params.train.N=4500000 \
- data.data_params.train.num_neg=4000000 \
+ data.data_params.train.N=2500000 \
+ data.data_params.train.num_neg=2000000 \
  data.data_params.train.g=0.3 \
  data.data_params.train.max_norm=0.1 \
  data.data_params.train.bp=0.09 \
@@ -413,7 +22,7 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=1e-5 
  data.data_params.train.online=False \
  data.data_params.train.off_online=False \
  data.data_params.train.augment=False \
- data.data_params.val.k=2 \
+ data.data_params.val.k=50 \
  data.data_params.val.n=500 \
  data.data_params.val.r=1 \
  data.data_params.val.g=0.3 \
@@ -427,7 +36,7 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=1e-5 
  data.data_params.val.online=False \
  data.data_params.val.off_online=False \
  data.data_params.val.augment=False \
- data.data_params.test.k=2 \
+ data.data_params.test.k=50 \
  data.data_params.test.n=500 \
  data.data_params.test.r=1 \
  data.data_params.test.g=0.3 \
@@ -446,42 +55,53 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=1e-5 
  task=regression
 ```
 
-
 ```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=5e-5 debug=False loss_func=std_mse \
+python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 lr=1e-5 debug=False cuda=0 \
  data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k500n500_noninfsmoothdist_highbp_highmn_upgap \
- data.data_params.train.N=1000000 \
- data.data_params.train.k=500 \
+ data.data_tag=rdm_concspheres_k250n500_noninfdist \
+ data.data_params.train.k=250 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
- data.data_params.train.g=0.4 \
- data.data_params.train.max_norm=0.12 \
- data.data_params.train.bp=0.1 \
+ data.data_params.train.N=1000000 \
+ data.data_params.train.g=0.3 \
+ data.data_params.train.max_norm=0.1 \
+ data.data_params.train.bp=0.09 \
  data.data_params.train.M=1.0 \
  data.data_params.train.D=0.07 \
  data.data_params.train.norm_factor=1 \
- data.data_params.val.k=500 \
+ data.data_params.train.gamma=0 \
+ data.data_params.train.online=False \
+ data.data_params.train.off_online=False \
+ data.data_params.train.augment=False \
+ data.data_params.val.k=250 \
  data.data_params.val.n=500 \
  data.data_params.val.r=1 \
- data.data_params.val.g=0.4 \
+ data.data_params.val.g=0.3 \
  data.data_params.val.N=200000 \
- data.data_params.val.max_norm=0.12 \
- data.data_params.val.bp=0.1 \
+ data.data_params.val.max_norm=0.1 \
+ data.data_params.val.bp=0.09 \
  data.data_params.val.M=1.0 \
  data.data_params.val.D=0.07 \
  data.data_params.val.norm_factor=1 \
- data.data_params.test.k=500 \
+ data.data_params.val.gamma=0 \
+ data.data_params.val.online=False \
+ data.data_params.val.off_online=False \
+ data.data_params.val.augment=False \
+ data.data_params.test.k=250 \
  data.data_params.test.n=500 \
  data.data_params.test.r=1 \
- data.data_params.test.g=0.4 \
+ data.data_params.test.g=0.3 \
  data.data_params.test.N=200000 \
- data.data_params.test.max_norm=0.12 \
- data.data_params.test.bp=0.1 \
+ data.data_params.test.max_norm=0.1 \
+ data.data_params.test.bp=0.09 \
  data.data_params.test.M=1.0 \
  data.data_params.test.D=0.07 \
  data.data_params.test.norm_factor=1 \
+ data.data_params.test.gamma=0 \
+ data.data_params.test.online=False \
+ data.data_params.test.off_online=False \
+ data.data_params.test.augment=False \
  model.input_size=500 \
- data.generate=True \
- task=regression
+ data.generate=False \
+ task=clf
 ```

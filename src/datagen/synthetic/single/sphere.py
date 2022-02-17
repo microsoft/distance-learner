@@ -766,46 +766,55 @@ class RandomSphere(Manifold, Dataset):
         for attr_set in [self._genattrs, self._specattrs]:
             for attr in vars(attr_set):
                 if attr in attrs:
-                    setattr(attr_set, attr, attrs[attr])
+                    if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
+                        data_attr = torch.load(attrs[attr]["path"])
+                        logger.info("[RandomSphere]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                        setattr(attr_set, attr, data_attr)
+                    else:
+                        setattr(attr_set, attr, attrs[attr])
 
 
     def save_data(self, save_dir):
-        """
-        based on past mistakes:
-        1. keep specification variables (typically non-iterables)
-           separately
-        2. keep tensors in a dictionary and pickle the dictionary, not
-           the whole object; helps with serialization errors
-        """
-        os.makedirs(save_dir, exist_ok=True)
-        specs_fn = os.path.join(save_dir, "specs.json")
-        data_fn = os.path.join(save_dir, "data.pkl")
+        super().save_data(save_dir)
+        # """
+        # based on past mistakes:
+        # 1. keep specification variables (typically non-iterables)
+        #    separately
+        # 2. keep tensors in a dictionary and pickle the dictionary, not
+        #    the whole object; helps with serialization errors
+        # """
+        # os.makedirs(save_dir, exist_ok=True)
+        # specs_fn = os.path.join(save_dir, "specs.json")
+        # data_fn = os.path.join(save_dir, "data.pkl")
 
-        specs_attrs = dict()
-        data_attrs = dict()
+        # specs_attrs = dict()
+        # data_attrs = dict()
 
-        gen_attrs = vars(self._genattrs)
-        sphere_attrs = vars(self._specattrs)
+        # gen_attrs = vars(self._genattrs)
+        # sphere_attrs = vars(self._specattrs)
 
-        for attr_set in [gen_attrs, sphere_attrs]:
-            for attr in attr_set:
-                if not isinstance(attr_set[attr], Iterable):
-                    specs_attrs[attr] = attr_set[attr]
-                else:
-                    data_attrs[attr] = attr_set[attr]
+        # for attr_set in [gen_attrs, sphere_attrs]:
+        #     for attr in attr_set:
+        #         if not isinstance(attr_set[attr], Iterable):
+        #             specs_attrs[attr] = attr_set[attr]
+        #         else:
+        #             attr_fn = os.path.join(save_dir, attr + ".pkl")
+        #             torch.save(attr_set[attr], attr_fn)
+        #             logger.info("[{}}]: data attribute ({}) saved to: {}".format(self.__class__.__name__, attr, attr_fn))
+        #             data_attrs[attr] = {"is_data_attr": True, "path": attr_fn}
 
-        with open(specs_fn, "w+") as f:
-            json.dump(specs_attrs, f)
+        # with open(specs_fn, "w+") as f:
+        #     json.dump(specs_attrs, f)
 
-        torch.save(data_attrs, data_fn)
+        # torch.save(data_attrs, data_fn)
 
     @classmethod
     def get_demo_cfg_dict(cls):
 
         train_cfg_dict = {
-            "N": 100000,
+            "N": 2500000,
             "num_neg": None,
-            "n": 2,
+            "n": 500,
             "k": 2,
             "r": 0.5,
             "max_norm": 0.25,

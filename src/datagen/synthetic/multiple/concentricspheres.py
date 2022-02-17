@@ -571,7 +571,7 @@ class ConcentricSpheres(Dataset):
             if attr in attrs:
                 if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
                     data_attr = torch.load(attrs[attr]["path"])
-                    logger.info("data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                    logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
                     setattr(self, attr, data_attr)
                 else:
                     setattr(self, attr, attrs[attr])
@@ -604,25 +604,24 @@ class ConcentricSpheres(Dataset):
             else:
                 attr_fn = os.path.join(save_dir, attr + ".pkl")
                 torch.save(attr_set[attr], attr_fn)
-                logger.info("data attribute ({}) saved to: {}".format(attr, attr_fn))
+                logger.info("[ConcentricSpheres]: data attribute ({}) saved to: {}".format(attr, attr_fn))
                 data_attrs[attr] = {"is_data_attr": True, "path": attr_fn}
 
         with open(specs_fn, "w+") as f:
             json.dump(specs_attrs, f)
 
-        try:
-            torch.save(data_attrs, data_fn)
-        except:
-            logger.info("[ConcentricSpheres]: dataset could not be saved!")
+
+        torch.save(data_attrs, data_fn)
+        
 
         self.S1.save_data(S1_dir)
         self.S2.save_data(S2_dir)
 
     @classmethod
-    def get_demo_cfg_dict(cls, n=2, k=2):
+    def get_demo_cfg_dict(cls, N=2500000, n=500, k=2):
 
         train_cfg_dict = {
-            "N": 100000,
+            "N": N,
             "num_neg": None,
             "n": n,
             "k": k,
@@ -704,10 +703,7 @@ class ConcentricSpheres(Dataset):
     
         if save_dir is not None:
             os.makedirs(train_dir, exist_ok=True)
-            try:
-                train_set.save_data(train_dir)
-            except:
-                logger.info("[ConcentricSpheres]: train set could not be saved!")
+            train_set.save_data(train_dir)
             os.makedirs(val_dir, exist_ok=True)
             val_set.save_data(val_dir)
             os.makedirs(test_dir, exist_ok=True)
@@ -721,10 +717,9 @@ class ConcentricSpheres(Dataset):
         train_dir = os.path.join(dump_dir, "train")
         os.makedirs(train_dir, exist_ok=True)
         train_set = cls()
-        try:
-            train_set.load_data(train_dir)
-        except:
-            train_set = None
+
+        train_set.load_data(train_dir)
+        
 
         val_dir = os.path.join(dump_dir, "val")
         os.makedirs(val_dir, exist_ok=True)

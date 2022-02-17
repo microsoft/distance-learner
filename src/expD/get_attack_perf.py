@@ -390,7 +390,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             adv_pct_cm.to_csv(adv_pct_cm_fn)
 
             # forming result entry
-            result_entry = attack_param_dict
+            result_entry = copy.deepcopy(attack_param_dict)
             result_entry.update(**data_param_dict)
             stat_dict = {
                 "inp_dir": inp_dir,

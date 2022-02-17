@@ -1,7 +1,14 @@
 import os
+import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 
+import torch
 import numpy as np
+
+from utils import init_logger
+
+logger = init_logger()
 
 class GeneralManifoldAttrs(object):
     """
@@ -526,9 +533,39 @@ class Manifold(ABC):
     @abstractmethod
     def save_data(self, save_dir):
         """
-        save data without pickling to avoid version issues
+        based on past mistakes:
+        1. keep specification variables (typically non-iterables)
+           separately
+        2. keep tensors in a dictionary and pickle the dictionary, not
+           the whole object; helps with serialization errors
         """
-        raise NotImplementedError
+        os.makedirs(save_dir, exist_ok=True)
+        specs_fn = os.path.join(save_dir, "specs.json")
+        data_fn = os.path.join(save_dir, "data.pkl")
+
+        specs_attrs = dict()
+        data_attrs = dict()
+
+        gen_attrs = vars(self._genattrs)
+        specific_attrs = vars(self._specattrs)
+
+        for attr_set in [gen_attrs, specific_attrs]:
+            for attr in attr_set:
+                if not isinstance(attr_set[attr], Iterable):
+                    specs_attrs[attr] = attr_set[attr]
+                else:
+                    attr_fn = os.path.join(save_dir, attr + ".pkl")
+                    logger.info("trying to save {} to {}".format(attr, attr_fn))
+                    if isinstance(attr_set[attr], np.ndarray):
+                        attr_set[attr] = torch.from_numpy(attr_set[attr])
+                    torch.save(attr_set[attr], attr_fn)
+                    logger.info("[{}]: data attribute ({}) saved to: {}".format(self.__class__.__name__, attr, attr_fn))
+                    data_attrs[attr] = {"is_data_attr": True, "path": attr_fn}
+
+        with open(specs_fn, "w+") as f:
+            json.dump(specs_attrs, f)
+
+        torch.save(data_attrs, data_fn)
 
     @abstractmethod
     def load_data(self, dump_dir):
