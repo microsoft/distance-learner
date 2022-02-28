@@ -214,16 +214,20 @@ def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, trai
 def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, data):
 
     train_set, val_set, test_set = initialise_data()
+    
 
     # delete attributes not required in training to save RAM
+    delete_attrs = list()
     for dataset in [train_set, val_set, test_set]:
         attrs = vars(dataset)
         for attr_name in attrs:
             if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgtname, ftname]:
-                delattr(dataset, attr_name)
+                delete_attrs.append(attr_name)
             # "S1" and "S2" not used in training when they are present so remove them
             elif "S1" in attr_name or "S2" in attr_name:
-                delattr(dataset, attr_name)
+                delete_attrs.append(attr_name)
+        for attr_name in delete_attrs:
+            delattr(dataset, attr_name)
 
     if task == "clf" and train_on_onmfld:
         for dataset in [train_set, val_set, test_set]:
