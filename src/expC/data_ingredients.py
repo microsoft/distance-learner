@@ -37,8 +37,6 @@ def data_cfg():
     data_dir = os.path.join(logdir, data_tag, "data") # complete data directory path
     data_params = DATA_CONFIGS[mtype]()
 
-
-
 @data_ingredient.capture
 def initialise_data(data_params, mtype="single-sphere", generate=True,\
     data_dir=None, data_tag=None, **kwargs):

@@ -718,8 +718,10 @@ class ConcentricSpheres(Dataset):
         os.makedirs(train_dir, exist_ok=True)
         train_set = cls()
 
-        train_set.load_data(train_dir)
-        
+        try:
+            train_set.load_data(train_dir)
+        except:
+            train_set = None
 
         val_dir = os.path.join(dump_dir, "val")
         os.makedirs(val_dir, exist_ok=True)
