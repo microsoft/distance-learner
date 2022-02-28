@@ -221,11 +221,12 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
     for dataset in [train_set, val_set, test_set]:
         attrs = vars(dataset)
         for attr_name in attrs:
-            if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgtname, ftname]:
-                delete_attrs.append(attr_name)
+            
+            if isinstance(attrs[attr_name], Iterable) and attr_name.lstrip("_") not in [tgtname, ftname]:
+                delete_attrs.append(attr_name.lstrip("_"))
             # "S1" and "S2" not used in training when they are present so remove them
             elif "S1" in attr_name or "S2" in attr_name:
-                delete_attrs.append(attr_name)
+                delete_attrs.append(attr_name.lstrip("_"))
         for attr_name in delete_attrs:
             delattr(dataset, attr_name)
 
