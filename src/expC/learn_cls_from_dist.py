@@ -233,7 +233,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
         delete_attrs = list()
         attrs = vars(dataset)
         for attr_name in attrs:
-            if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgt_attr, ft_attr]:
+            if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgt_attr, ft_attr, "class_labels", "all_distances"]:
                 delete_attrs.append(attr_name)
             # "S1" and "S2" not used in training when they are present so remove them
             elif "S1" in attr_name or "S2" in attr_name:
@@ -246,6 +246,8 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
     if task == "clf" and train_on_onmfld:
         for dataset in [train_set, val_set, test_set]:
             for attr in ["all_points", "all_distances", "normed_all_points", "normed_all_distances", "class_labels"]:
+                if not hasattr(dataset, attr):
+                    continue
                 if isinstance(dataset, manifold.Manifold):
                     setattr(dataset.genattrs, attr, getattr(dataset.genattrs, attr)[dataset.genattrs.class_labels != OFF_MFLD_LABEL])
                 else:
@@ -272,11 +274,12 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                 
                 min_dists = None
                 argmin_mfld = None
+                distance_attr = getattr(dataset, tgt_attr)
                 if num_mflds > 1:
-                    min_dists, argmin_mfld = torch.min(dataset.all_distances, axis=1)
+                    min_dists, argmin_mfld = torch.min(distance_attr, axis=1)
                 else:
                     # for single manifold
-                    min_dists, argmin_mfld = dataset.all_distances, torch.zeros_like(dataset.all_distances)
+                    min_dists, argmin_mfld = distance_attr, torch.zeros_like(distance_attr)
 
                 for i in range(dataset.N):
                     if min_dists[i] < dataset.D:
