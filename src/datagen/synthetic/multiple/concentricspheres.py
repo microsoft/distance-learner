@@ -737,7 +737,7 @@ class ConcentricSpheres(Dataset):
 
 
     def __len__(self):
-        return self.all_points.shape[0]
+        return self.normed_all_points.shape[0]
 
     def __getitem__(self, idx):
         batch = {
