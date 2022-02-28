@@ -740,22 +740,30 @@ class ConcentricSpheres(Dataset):
         return self.normed_all_points.shape[0]
 
     def __getitem__(self, idx):
-        batch = {
-            "points": self.all_points[idx],
-            "distances": self.all_distances[idx],
-            "actual_distances": self.all_actual_distances[idx],
-            "normed_points": self.normed_all_points[idx],
-            "normed_distances": self.normed_all_distances[idx],
-            "normed_actual_distances": self.normed_all_actual_distances[idx],
-            "classes": self.class_labels[idx],
+        item_attr_map = {
+            "points": "all_points",
+            "distances": "all_distances",
+            "actual_distances": "all_actual_distances",
+            "smooth_distances": "all_smooth_distances",
+            "normed_smooth_distances": "normed_smooth_distances",
+            "normed_points": "normed_all_points",
+            "normed_distances": "normed_all_distances",
+            "normed_actual_distances": "normed_all_actual_distances",
+            "pre_classes": "pre_class_labels",
+            "classes": "class_labels"
         }
 
-        if self.pre_class_labels is not None:
-            batch["pre_classes"] = self.pre_class_labels[idx]
-        if self.all_smooth_distances is not None:
-            batch["smooth_distances"] = self.all_smooth_distances[idx]
-        if self.normed_all_smooth_distances is not None:
-            batch["normed_smooth_distances"] = self.normed_all_smooth_distances[idx]
+        batch = dict()
+        for attr in item_attr_map:
+            if hasattr(self, item_attr_map[attr]):
+                batch[attr] = getattr(self, item_attr_map[attr])[idx]
+
+        # if self.pre_class_labels is not None:
+        #     batch["pre_classes"] = self.pre_class_labels[idx]
+        # if self.all_smooth_distances is not None:
+        #     batch["smooth_distances"] = self.all_smooth_distances[idx]
+        # if self.normed_all_smooth_distances is not None:
+        #     batch["normed_smooth_distances"] = self.normed_all_smooth_distances[idx]
 
         return batch
 
