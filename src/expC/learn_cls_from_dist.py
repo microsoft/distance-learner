@@ -217,17 +217,30 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
     
 
     # delete attributes not required in training to save RAM
-    delete_attrs = list()
+    attr_name_map = {
+        "points": "all_points",
+        "distances": "all_distances",
+        "actual_distances": "all_actual_distances",
+        "normed_points": "normed_all_points",
+        "normed_distances": "normed_all_distances",
+        "normed_actual_distances": "normed_all_actual_distances",
+        "classes": "class_labels"
+    }
+    tgt_attr = attr_name_map[tgtname]
+    ft_attr = attr_name_map[ftname]
+
     for dataset in [train_set, val_set, test_set]:
+        delete_attrs = list()
         attrs = vars(dataset)
         for attr_name in attrs:
-            
-            if isinstance(attrs[attr_name], Iterable) and attr_name.lstrip("_") not in [tgtname, ftname]:
-                delete_attrs.append(attr_name.lstrip("_"))
+            if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgt_attr, ft_attr]:
+                delete_attrs.append(attr_name)
             # "S1" and "S2" not used in training when they are present so remove them
             elif "S1" in attr_name or "S2" in attr_name:
-                delete_attrs.append(attr_name.lstrip("_"))
+                delete_attrs.append(attr_name)
+
         for attr_name in delete_attrs:
+            print(attr_name)
             delattr(dataset, attr_name)
 
     if task == "clf" and train_on_onmfld:
