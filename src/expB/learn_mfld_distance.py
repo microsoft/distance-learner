@@ -211,11 +211,16 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
         capture_attrs =  ["S1_config", "S2_config", "n", "seed"]
 
         for phase in ["train", "val"]:
-            fig = plotDataIn3D(dataloaders[phase].dataset.all_points)
-            writer.add_figure(phase + "/all_points", fig)
-            data_vars = vars(dataloaders[phase].dataset)
-            writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
-
+            if hasattr(dataloaders[phase].dataset, "all_points"):
+                fig = plotDataIn3D(dataloaders[phase].dataset.all_points)
+                writer.add_figure(phase + "/all_points", fig)
+                data_vars = vars(dataloaders[phase].dataset)
+                writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
+            else:
+                fig = plotDataIn3D(getattr(dataloaders[phase].dataset, feature_name))
+                writer.add_figure(phase + "/{}".format(feature_name), fig)
+                data_vars = vars(dataloaders[phase].dataset)
+                writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
         
 
         writer.add_graph(model, dataloaders["train"].dataset.normed_all_points[:dataloaders["train"].batch_size])

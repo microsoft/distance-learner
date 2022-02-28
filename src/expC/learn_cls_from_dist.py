@@ -185,6 +185,8 @@ def config(data, model):
     if task == "clf":
         tgtname = "classes"
 
+    ram_efficient = True # delete unneeded attributes of dataset for freeing up RAM
+
     # TIME_STAMP = time.strftime("%d%m%Y-%H%M%S")
 
     # name = "stdclf_vs_distlearn"
@@ -211,11 +213,10 @@ def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, trai
 
 
 @ex.capture
-def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, data):
+def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, ram_efficient, data):
 
     train_set, val_set, test_set = initialise_data()
     
-
     # delete attributes not required in training to save RAM
     attr_name_map = {
         "points": "all_points",
@@ -228,20 +229,20 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
     }
     tgt_attr = attr_name_map[tgtname]
     ft_attr = attr_name_map[ftname]
+    if ram_efficient:
+        for dataset in [train_set, val_set, test_set]:
+            delete_attrs = list()
+            attrs = vars(dataset)
+            for attr_name in attrs:
+                if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgt_attr, ft_attr, "class_labels", "all_distances", "all_actual_distances", "normed_all_distances", "normed_all_actual_distances"]:
+                    delete_attrs.append(attr_name)
+                # "S1" and "S2" not used in training when they are present so remove them
+                elif "S1" in attr_name or "S2" in attr_name:
+                    delete_attrs.append(attr_name)
 
-    for dataset in [train_set, val_set, test_set]:
-        delete_attrs = list()
-        attrs = vars(dataset)
-        for attr_name in attrs:
-            if isinstance(attrs[attr_name], Iterable) and attr_name not in [tgt_attr, ft_attr, "class_labels", "all_distances", "all_actual_distances", "normed_all_distances", "normed_all_actual_distances"]:
-                delete_attrs.append(attr_name)
-            # "S1" and "S2" not used in training when they are present so remove them
-            elif "S1" in attr_name or "S2" in attr_name:
-                delete_attrs.append(attr_name)
-
-        for attr_name in delete_attrs:
-            print(attr_name)
-            delattr(dataset, attr_name)
+            for attr_name in delete_attrs:
+                print(attr_name)
+                delattr(dataset, attr_name)
 
     if task == "clf" and train_on_onmfld:
         for dataset in [train_set, val_set, test_set]:
