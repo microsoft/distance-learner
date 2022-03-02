@@ -241,7 +241,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                     delete_attrs.append(attr_name)
 
             for attr_name in delete_attrs:
-                print(attr_name)
+                # print(attr_name)
                 delattr(dataset, attr_name)
 
     if task == "clf" and train_on_onmfld:
