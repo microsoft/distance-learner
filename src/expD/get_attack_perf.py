@@ -119,21 +119,25 @@ def load_model_for_run(run_dir):
     return model_fn
 
 @ex.capture
-def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers):
+def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, use_split="test"):
 
     # loading the data
     mtype = run_config["data"]["mtype"]
     data_class = datagen.dtype[mtype]
     data_dir = os.path.join(run_parent_dir, "data")
-    train_set, val_set, test_set = data_class.load_splits(data_dir)
-
+    # train_set, val_set, test_set = data_class.load_splits(data_dir)
+    dataset = data_class()
+    dataset.load_data(os.path.join(data_dir, use_split))
     dataloaders = {
-        "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
-        "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+        use_split: DataLoader(dataset=dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers)
     }
-    if train_set is not None:
-        dataloaders["train"] = DataLoader(dataset=train_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
-    
+
+    # dataloaders = {
+    #     "val": DataLoader(dataset=val_set, shuffle=False, batch_size=batch_size, num_workers=num_workers),
+    #     "test": DataLoader(dataset=test_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+    # }
+    # if train_set is not None:
+    #     dataloaders["train"] = DataLoader(dataset=train_set, shuffle=False, batch_size=batch_size, num_workers=num_workers)
 
     return dataloaders
 
@@ -176,7 +180,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     }
 
     if "train" in dataloaders:
-        data_param_dict["train.N"] = dataloaders["train"].dataset.N
+        data_param_dict["train.N"] = run_config["data"]["train"]["N"]
 
     attack_param_names = list(attack.keys())
     attack_param_vals = list(attack.values())
