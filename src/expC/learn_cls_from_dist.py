@@ -383,7 +383,7 @@ def run_eval(data, model, dataloaders, datasets, cuda, task, ftname, tgtname, in
         # TODO: maybe ammend multi-manifold datasets to avoid this?
         if num_classes >= 2:
             if task == "regression":
-                thresh = datasets[split].S1.genattrs.D / datasets[split].norm_factor
+                thresh = datasets[split].D / datasets[split].norm_factor
                 _, _, _, _, clf_report_dict = argmin_dist_clf(all_logits, all_targets, datasets[split].class_labels, thresh=thresh)
                 log_clf_dict(_run, clf_report_dict, split, on_mfld=True)
                 _, _, _, _, clf_report_dict = argmin_dist_clf(all_logits, all_targets, datasets[split].class_labels, thresh=thresh, on_mfld=False)
@@ -473,7 +473,7 @@ def run_eval(data, model, dataloaders, datasets, cuda, task, ftname, tgtname, in
         elif task == "regression":
             gen_pred_classes = torch.min(gen_2d_logits, axis=1)[1]            
 
-        THRESH = datasets["train"].S1.genattrs.D / datasets["train"].norm_factor
+        THRESH = datasets["train"].D / datasets["train"].norm_factor
 
         if task == "regression": gen_pred_classes[torch.min(gen_2d_logits, axis=1)[0] >= THRESH] = OFF_MFLD_LABEL
 
