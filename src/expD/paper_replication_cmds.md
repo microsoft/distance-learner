@@ -4,9 +4,9 @@ First run the Distance Learner for the dataset that is similar to the one given 
 
 
 ```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 lr=8e-06 batch_size=2048 debug=False loss_func=std_mse tgtname=normed_actual_distances warmup=10 \
+python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 lr=1e-05 batch_size=10240 debug=False loss_func=std_mse tgtname=normed_actual_distances warmup=20 \
  data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k2n500_noninfdist_moreoffmfld_bs2048_lr_tuning \
+ data.data_tag=rdm_concspheres_k2n500_noninfdist_moreoffmfld_bs2048_lr_tuning_vm3 \
  data.data_params.train.k=2 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
