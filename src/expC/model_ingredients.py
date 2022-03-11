@@ -1,3 +1,5 @@
+from pickletools import optimize
+from tkinter import N
 import torch
 import numpy as np
 from sacred import Ingredient
@@ -28,8 +30,14 @@ def initialise_model(model_type="mt-mlp-norm", input_size=3,\
          output_size=output_size, hidden_sizes=hidden_sizes,\
          use_tanh=use_tanh, use_relu=use_relu, weight_norm=weight_norm)
 
-    if init_wts is not None:
-        model.load_state_dict(torch.load(init_wts)["model_state_dict"])
+    scheduler_state_dict = None
+    optimizer_state_dict = None
 
-    return model
+    if init_wts is not None:
+        ckpt = torch.load(init_wts)
+        model.load_state_dict(ckpt["model_state_dict"])
+        scheduler_state_dict = ckpt["scheduler_state_dict"]
+        optimizer_state_dict = ckpt["optimizer_state_dict"]
+
+    return model, scheduler_state_dict, optimizer_state_dict
 

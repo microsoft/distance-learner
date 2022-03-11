@@ -313,7 +313,7 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
     
     datasets, dataloaders = data_setup()
 
-    model = initialise_model()
+    model, scheduler_state_dict, optimizer_state_dict = initialise_model()
     # print(model)
     loss_function = lmd.loss_funcs[loss_func]
 
@@ -325,6 +325,11 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
     lr_sched_factor = lambda epoch: epoch / (scheduler_params["warmup"]) if epoch <= scheduler_params["warmup"] else (1 if epoch > scheduler_params["warmup"] and epoch < scheduler_params["cooldown"] else max(0, 1 + (1 / (scheduler_params["cooldown"] - num_epochs)) * (epoch - scheduler_params["cooldown"])))
     
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_sched_factor)
+
+    if optimizer_state_dict is not None:
+        optimizer.load_state_dict(optimizer_state_dict)
+    if scheduler_state_dict is not None:
+        scheduler.load_state_dict(scheduler_state_dict)
     
     model, optimizer, scheduler, _, _ = lmd.train(model, optimizer, loss_function,\
         dataloaders, device, save_dir, scheduler, feature_name=ftname, target_name=tgtname,\
