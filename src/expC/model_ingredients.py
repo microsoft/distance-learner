@@ -1,5 +1,3 @@
-from pickletools import optimize
-from tkinter import N
 import torch
 import numpy as np
 from sacred import Ingredient
