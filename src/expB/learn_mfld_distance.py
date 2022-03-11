@@ -424,13 +424,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 plt.savefig(os.path.join(save_dir, "pred_vs_gt_dists_all_{}.png".format(phase)))
                 plt.clf()
 
-        check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss or epoch == 100
+        check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss 
+        debug_check = epoch % 10 == 0
         stat = "val_loss"
         if task == "clf":
-            check = last_best_epoch_loss is None or logs["val_f1"] > last_best_epoch_loss
+            check = last_best_epoch_loss is None or logs["val_f1"] > last_best_epoch_loss 
             stat = "val_f1"
             
-        if check:
+        if check or debug_check:
             last_best_epoch_loss = logs[stat]
             dump = {
                 'epoch': epoch,
@@ -450,8 +451,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
 
             if debug:   
                 torch.save(dump, os.path.join(model_dir, name + "_val_loss_" + str(logs["val_loss"]) + "_epoch_" + str(epoch) + ".pth"))
-            else:
+            if check:
                 torch.save(dump, os.path.join(model_dir, "ckpt" + ".pth"))
+            if debug_check:
+                torch.save(dump, os.path.join(model_dir, "running_ckpt" + ".pth"))
 
         
         logs["lr"] = optimizer.param_groups[0]["lr"]
