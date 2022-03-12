@@ -173,6 +173,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     dataset = dataloaders[use_split].dataset
     data_param_dict = {
         "run_tag": run_config["data"]["data_tag"],
+        "run_id": os.path.basename(run_dir),
         "k": dataset.k,
         "n": dataset.n,
         "max_norm": dataset.max_norm,
@@ -193,6 +194,8 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
     result_tag += ",task={}".format(task)
 
+    completed_attack_settings = list()
+
     for comb in product(*attack_param_vals):
 
         attack_param_dict = {attack_param_names[i]: comb[i] for i in range(len(attack_param_names))}
@@ -205,9 +208,23 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         verbose = attack_param_dict["verbose"]
         restarts = attack_param_dict["restarts"]
 
+        # no version of the `chans` exists for distance learner. skip to avoid 
+        # duplicate computations with `my`
+        if atk_routine == "chans" and task == "dist":
+            _log.info("no version of the `chans` exists for distance learner. skipping to avoid recomputations with `my`...")
+            continue
+
         attack_fn, atk_routine = get_atk(atk_flavor, task, atk_routine)
+
         # so that if input atk_routine is unavailable, the one used is captured
-        attack_param_dict["atk_routine"] = atk_routine
+        if atk_routine != attack_param_dict["atk_routine"]:
+            attack_param_dict["atk_routine"] = atk_routine
+            # if resulting attack settings are duplicate, skip it
+            if attack_param_dict in completed_attack_settings:
+                _log.info("duplicate attack settings. skipping...")
+                continue
+
+        
 
         result_parent_dir = os.path.join(run_dir, "attack_perf")
         # _log.info(result_tag)
@@ -244,6 +261,8 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
             tgtname=run_config["tgtname"], \
             result_dir=result_dir)
         result_container.extend(result_entries)
+
+        completed_attack_settings.append(attack_param_dict)
 
         if not debug:
             out_fn = os.path.join(result_dir, "min_dist_to_pb_raw.pt")
@@ -619,7 +638,8 @@ def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dum
         
         run_task = run_config["task"]
         run_data_tag = run_config["data"]["data_tag"]
-        run_result_tag = run_data_tag + "-" + run_task + ".json"
+        run_id = os.path.basename(inp_dir)
+        run_result_tag = run_data_tag + "-" + run_id + "-" + run_task + ".json"
         result_for_run_fn = os.path.join(sep_results_for_all_runs_dir, run_result_tag)
         
         _log.info("saving result for run in: {}".format(result_for_run_fn))

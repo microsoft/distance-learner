@@ -16,7 +16,12 @@ def inpfn_config():
     # }
     proj_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
     settings_to_analyze = {
-        "rdm_concspheres_k2n500_noninfdist_moreoffmfld_bs2048_lr_tuning": ["6", "7"]
+        "rdm_concspheres_k2n500_noninfdist_moreoffmfld_bs2048_lr_tuning": ["6", "7"],
+        "rdm_concspheres_k10n500_noninfdist_moreoffmfld": ["1", "2"],
+        "rdm_concspheres_k25n500_noninfdist_moreoffmfld": ["1", "2"],
+        "rdm_concspheres_k499n500_noninfdist_moreoffmfld": ["1", "2"],
+        "rdm_concspheres_k450n500_noninfdist_moreoffmfld": ["1", "2"],
+        "rdm_concspheres_k5n500_noninfdist_moreoffmfld": ["1", "2"]
     }
     settings_fn = None
     if settings_fn is not None:
