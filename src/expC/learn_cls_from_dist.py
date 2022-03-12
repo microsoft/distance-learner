@@ -328,6 +328,10 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
 
     if optimizer_state_dict is not None:
         optimizer.load_state_dict(optimizer_state_dict)
+        for state in optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(device)
     if scheduler_state_dict is not None:
         scheduler.load_state_dict(scheduler_state_dict)
     
