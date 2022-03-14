@@ -489,9 +489,12 @@ class ConcentricSpheres(Dataset):
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
         self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
-        self.normed_all_smooth_distances = self.all_smooth_distances / self.norm_factor
+            
 
         if self.N < 1e+7:
+            self.normed_all_smooth_distances = self.all_smooth_distances / self.norm_factor
+
+
             self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
             self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
             self.S1.genattrs.normed_actual_distances = self.normed_all_actual_distances[:self._N//2]
@@ -503,12 +506,15 @@ class ConcentricSpheres(Dataset):
         # change anchor point to bring it closer to origin (smaller numbers are easier to learn)
         tmp = self.gamma if self.gamma is not None else 1
         self.fix_center = tmp * np.ones(self._n)
-        self.normed_all_points = self.normed_all_points - self.anchor + self.fix_center
+        self.normed_all_points -= self.anchor
+        self.normed_all_points += self.fix_center
+        # self.normed_all_points = self.normed_all_points - self.anchor + self.fix_center
 
         self.normed_all_points = self.normed_all_points.float()
         self.normed_all_distances = self.normed_all_distances.float()
         self.normed_all_actual_distances = self.normed_all_actual_distances.float()
-        self.normed_all_smooth_distances = self.normed_all_smooth_distances.float()
+        if self.N < 1e+7:
+            self.normed_all_smooth_distances = self.normed_all_smooth_distances.float()
     
     def invert_points(self, normed_points):
         unnormed_points = normed_points - self.fix_center + self.anchor
