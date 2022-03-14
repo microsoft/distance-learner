@@ -774,7 +774,7 @@ class ConcentricSpheres(Dataset):
 
         batch = dict()
         for attr in item_attr_map:
-            if hasattr(self, item_attr_map[attr]):
+            if hasattr(self, item_attr_map[attr]) and getattr(self, item_attr_map[attr]) is not None:
                 batch[attr] = getattr(self, item_attr_map[attr])[idx]
 
         # if self.pre_class_labels is not None:
