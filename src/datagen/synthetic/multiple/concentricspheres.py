@@ -345,11 +345,12 @@ class ConcentricSpheres(Dataset):
 
         # pre-image class labels
         # 2: no manifold; 0: S_1; 1: S_2
-        self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
-        self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
-        self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
-        self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
-        self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+        if self.N < 1e+7:
+            self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+            self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
+            self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+            self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
+            self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
         # true distances of points in S1 to S2 and vice versa are not available and marked `M`
         self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
@@ -359,22 +360,30 @@ class ConcentricSpheres(Dataset):
         self.all_actual_distances[self.S1.genattrs.N:, 0] = self._M
 
         # smoothed distances of points
-        self.all_smooth_distances = np.copy(self.all_actual_distances)
-        within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
-        self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
-        self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
+        if self.N < 1e+7:
+            self.all_smooth_distances = np.copy(self.all_actual_distances)
+            within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
+            self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
+            self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
         self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
-        self.all_smooth_distances = torch.from_numpy(self.all_smooth_distances).float()
+        if self.N < 1e+7:
+            self.all_smooth_distances = torch.from_numpy(self.all_smooth_distances).float()
         self.class_labels = torch.from_numpy(self.class_labels).long()
+
+        if self.N > 1e+7:
+            del self.S1
+            del self.S2
 
         if self._normalize:
             self.norm()
             logger.info("[ConcentricSpheres]: Overall noramalization done")
 
-        self.get_all_points_k()
+        
+        
+        # self.get_all_points_k()
 
     def resample_points(self, seed=42, no_op=False):
         if no_op:
@@ -482,13 +491,14 @@ class ConcentricSpheres(Dataset):
         self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
         self.normed_all_smooth_distances = self.all_smooth_distances / self.norm_factor
 
-        self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
-        self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
-        self.S1.genattrs.normed_actual_distances = self.normed_all_actual_distances[:self._N//2]
+        if self.N < 1e+7:
+            self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
+            self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
+            self.S1.genattrs.normed_actual_distances = self.normed_all_actual_distances[:self._N//2]
 
-        self.S2.genattrs.normed_points_n = self.normed_all_points[self._N//2:]
-        self.S2.genattrs.normed_distances = self.normed_all_distances[self._N//2:]
-        self.S2.genattrs.normed_actual_distances = self.normed_all_actual_distances[self._N//2:]
+            self.S2.genattrs.normed_points_n = self.normed_all_points[self._N//2:]
+            self.S2.genattrs.normed_distances = self.normed_all_distances[self._N//2:]
+            self.S2.genattrs.normed_actual_distances = self.normed_all_actual_distances[self._N//2:]
 
         # change anchor point to bring it closer to origin (smaller numbers are easier to learn)
         tmp = self.gamma if self.gamma is not None else 1
@@ -576,18 +586,21 @@ class ConcentricSpheres(Dataset):
                 else:
                     setattr(self, attr, attrs[attr])
 
-        self.S1 = RandomSphere()
-        self.S1.load_data(S1_dump)
+        if os.path.exists(S1_dump):
+            self.S1 = RandomSphere()
+            self.S1.load_data(S1_dump)
 
-        self.S2 = RandomSphere()
-        self.S2.load_data((S2_dump))
+        if os.path.exists(S2_dump):
+            self.S2 = RandomSphere()
+            self.S2.load_data((S2_dump))
 
 
     def save_data(self, save_dir):
 
         os.makedirs(save_dir, exist_ok=True)
-        S1_dir = os.path.join(save_dir, "S1_dump")
-        S2_dir = os.path.join(save_dir, "S2_dump")
+        if self.N < 1e+7:
+            S1_dir = os.path.join(save_dir, "S1_dump")
+            S2_dir = os.path.join(save_dir, "S2_dump")
 
         specs_fn = os.path.join(save_dir, "specs.json")
         data_fn = os.path.join(save_dir, "data.pkl")
@@ -613,9 +626,9 @@ class ConcentricSpheres(Dataset):
 
         torch.save(data_attrs, data_fn)
         
-
-        self.S1.save_data(S1_dir)
-        self.S2.save_data(S2_dir)
+        if self.N < 1e+7:
+            self.S1.save_data(S1_dir)
+            self.S2.save_data(S2_dir)
 
     @classmethod
     def get_demo_cfg_dict(cls, N=2500000, n=500, k=2):
