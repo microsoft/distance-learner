@@ -179,7 +179,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
         "max_norm": dataset.max_norm,
         "N": dataset.N
     }
-    data_param_dict["train.N"] = run_config["data"]["train"]["N"]
+    data_param_dict["train.N"] = run_config["data"]["data_params"]["train"]["N"]
 
     attack_param_names = list(attack.keys())
     attack_param_vals = list(attack.values())
