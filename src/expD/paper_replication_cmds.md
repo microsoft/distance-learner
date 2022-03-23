@@ -55,7 +55,7 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=1
 ```
 
 ```bash
-python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=1e-5 debug=False cuda=0 \
+python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=False cuda=0 \
  data.mtype=conc-spheres batch_size=4096 \
  data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096 \
  data.data_params.train.k=50 \
