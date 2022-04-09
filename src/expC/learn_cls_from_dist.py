@@ -176,6 +176,8 @@ def config(data, model):
     off_online = data["data_params"]["train"]["off_online"]
     augment = data["data_params"]["train"]["augment"]
 
+    on_mfld_noise = 1e-6
+
     loss_func = "masked_mse" # ["std_mse", "masked_mse", "weighted_mse", "cross_entropy"]
     if task == "clf":
         loss_func = "cross_entropy"
@@ -213,7 +215,7 @@ def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, trai
 
 
 @ex.capture
-def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, ram_efficient, data):
+def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, ram_efficient, on_mfld_noise, data):
 
     train_set, val_set, test_set = initialise_data()
     
@@ -245,6 +247,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                 delattr(dataset, attr_name)
 
     if task == "clf" and train_on_onmfld:
+        idx = 0
         for dataset in [train_set, val_set, test_set]:
             for attr in ["all_points", "all_distances", "normed_all_points", "normed_all_distances", "class_labels"]:
                 if not hasattr(dataset, attr):
@@ -252,8 +255,11 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                 if isinstance(dataset, manifold.Manifold):
                     setattr(dataset.genattrs, attr, getattr(dataset.genattrs, attr)[dataset.genattrs.class_labels != OFF_MFLD_LABEL])
                 else:
-                    setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL])
-    
+                    if attr == "normed_all_points" and idx > 0:
+                        noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
+                        noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
+                    setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
+            idx += 1
     elif (task == "regression") or (task == "clf" and not train_on_onmfld):
         for dataset in [train_set, val_set, test_set]:
             if isinstance(dataset, manifold.Manifold):
