@@ -258,7 +258,9 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                     if attr == "normed_all_points" and idx > 0:
                         noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
                         noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
-                    setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
+                        setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
+                    else:
+                        setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL])
             idx += 1
     elif (task == "regression") or (task == "clf" and not train_on_onmfld):
         for dataset in [train_set, val_set, test_set]:
