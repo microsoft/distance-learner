@@ -3,6 +3,7 @@ Explores various ways to classify points on spheres (or general manifold)
 using the distance learned in Experiment B (see: `learn_mfld_distance.py`)
 """
 
+from hashlib import new
 import os
 import re
 import sys
@@ -177,6 +178,8 @@ def config(data, model):
     augment = data["data_params"]["train"]["augment"]
 
     on_mfld_noise = 1e-6
+    test_off_mfld = True # test stdclf with off mfld samples
+
 
     loss_func = "masked_mse" # ["std_mse", "masked_mse", "weighted_mse", "cross_entropy"]
     if task == "clf":
@@ -215,7 +218,7 @@ def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, trai
 
 
 @ex.capture
-def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, ram_efficient, on_mfld_noise, data):
+def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_workers, num_mflds, tgtname, ftname, ram_efficient, on_mfld_noise, test_off_mfld, data):
 
     train_set, val_set, test_set = initialise_data()
     
@@ -258,7 +261,14 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                     if attr == "normed_all_points" and idx > 0:
                         noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
                         noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
-                        setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
+                        if not test_off_mfld:
+                            setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
+                        else:
+                            setattr(dataset, attr, getattr(dataset, attr) + noise_mat)
+                            new_class_labels = getattr(dataset, "class_labels").clone()
+                            new_class_labels[new_class_labels == OFF_MFLD_LABEL][:dataset.S1.genattrs.num_neg] = 0
+                            new_class_labels[new_class_labels == OFF_MFLD_LABEL][dataset.S1.genattrs.num_neg:] = 1
+                            setattr(dataset, attr, new_class_labels)
                     else:
                         setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL])
             idx += 1
