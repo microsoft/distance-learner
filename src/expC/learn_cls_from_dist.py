@@ -259,11 +259,14 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                     setattr(dataset.genattrs, attr, getattr(dataset.genattrs, attr)[dataset.genattrs.class_labels != OFF_MFLD_LABEL])
                 else:
                     if attr == "normed_all_points" and idx > 0:
-                        noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
-                        noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
+                        
                         if not test_off_mfld:
+                            noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
+                            noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
                             setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL] + noise_mat)
                         else:
+                            noise_mat = torch.randn(getattr(dataset, attr).shape)
+                            noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
                             setattr(dataset, attr, getattr(dataset, attr) + noise_mat)
                             new_class_labels = getattr(dataset, "class_labels").clone()
                             new_class_labels[new_class_labels == OFF_MFLD_LABEL][:dataset.S1.genattrs.num_neg] = 0
