@@ -269,8 +269,9 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                             noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
                             setattr(dataset, attr, getattr(dataset, attr) + noise_mat)
                             new_class_labels = getattr(dataset, "class_labels").clone()
-                            new_class_labels[new_class_labels == OFF_MFLD_LABEL][:dataset.S1.genattrs.num_neg] = 0
-                            new_class_labels[new_class_labels == OFF_MFLD_LABEL][dataset.S1.genattrs.num_neg:] = 1
+                            tmp_idx0 = (new_class_labels == 0).nonzero(as_tuple=True)[0]
+                            new_class_labels[:tmp_idx0][new_class_labels == OFF_MFLD_LABEL] = 0
+                            new_class_labels[new_class_labels == OFF_MFLD_LABEL] = 1
                             setattr(dataset, attr, new_class_labels)
                     else:
                         setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL])
