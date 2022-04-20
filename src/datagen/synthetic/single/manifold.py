@@ -32,7 +32,7 @@ class GeneralManifoldAttrs(object):
     def __init__(self, N=1000, num_neg=None, n=100, k=3, D=50.0,\
                  max_norm=2.0, mu=10, sigma=5, seed=42, normalize=True,\
                  norm_factor=1, gamma=0.5, anchor=None, rotation=None, translation=None,\
-                 online=False, off_online=False, augment=1, **kwargs):
+                 online=False, off_online=False, augment=1,**kwargs):
         """
         :param N: total number of samples
         :type N: int

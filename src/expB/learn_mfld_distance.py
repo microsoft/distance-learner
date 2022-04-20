@@ -47,6 +47,8 @@ from expB.ptcifar.models import ResNet18
 from expB.myNNs import *
 from expB.workspace import *
 
+import expD.attacks as adv_atk
+
 from datagen.synthetic.multiple.intertwinedswissrolls import IntertwinedSwissRolls
 
 from utils import *
@@ -126,7 +128,8 @@ def init():
 def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,\
           feature_name="normed_points", target_name="normed_distances",\
           num_epochs=500, task="regression", name="MLP_512x4_in1000",\
-          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None, debug=False, online=False):
+          scheduler_params={"warmup": 10, "cooldown": 300}, specs_dict=None,\
+          debug=False, online=False, adv_train=False, adv_train_params=None):
     """
         Function to train the model. Also dumps the best model.
         
@@ -321,13 +324,32 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 
 
                 model = model.to(device)
+                
                 # print("where is model?", next(model.parameters()).is_cuda)
                 logits = None
                 if phase == "val":
                     with torch.no_grad():
                         logits = model(points)
                 elif phase == "train":
-                    logits = model(points)
+                    if adv_train:
+                        atk_flavor = adv_train_params["atk_flavor"]
+                        atk_task = adv_train_params["atk_task"]
+                        atk_routine = adv_train_params["atk_routine"]
+                        atk_eps = adv_train_params["atk_eps"]
+                        atk_eps_iter = adv_train_params["atk_eps_iter"]
+                        atk_nb_iter = adv_train_params["atk_nb_iter"]
+                        atk_norm = adv_train_params["atk_norm"]
+                        atk_restarts = adv_train_params["atk_restarts"]
+
+                        atk_fn = adv_atk.attacks[atk_flavor][atk_task][atk_routine]
+                        
+                        adv_points = atk_fn(model_fn=model, x=points, y=targets,\
+                                            eps=atk_eps, eps_iter=atk_eps_iter, nb_iter=atk_nb_iter,\
+                                            verbose=False, norm=atk_norm, restarts=atk_restarts)
+                        logits = model(adv_points)
+
+                    else:
+                        logits = model(points)
                     # print("where are logits?", logits.device)
                 # print(points.shape, distances.shape, logits.shape)
 

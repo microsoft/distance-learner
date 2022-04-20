@@ -52,9 +52,9 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
+
 
 from utils import *
 from datagen import datagen
@@ -88,7 +88,7 @@ def config(attack, input_files):
     # th_analyze = np.array([1e-2])
     th_analyze = np.append(th_analyze, np.inf)
 
-    debug = True
+    debug = False
     clean = False
 
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"

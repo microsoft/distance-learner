@@ -170,6 +170,18 @@ def config(data, model):
     cooldown = 300
     lr = 1e-5
 
+    adv_train = False
+    adv_train_params = {
+        "atk_flavor": "std_pgd",
+        "atk_task": task,
+        "atk_routine": "my",
+        "atk_eps": 5e-2,
+        "atk_eps_iter": 5e-03,
+        "atk_nb_iter": 40,
+        "atk_norm": 2,
+        "atk_restarts": 1
+    }
+
     num_mflds = 2 # number of manifolds
     num_classes = num_mflds if (train_on_onmfld and task == "clf") or (task == "regression") else num_mflds + 1 # useful for stdclf only
     input_size = data["data_params"]["train"]["n"] # dimension in which manifold is embedded
@@ -269,12 +281,13 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
                             noise_mat = on_mfld_noise * (noise_mat / torch.norm(noise_mat, p=2, dim=1).reshape(-1, 1))
                             setattr(dataset, attr, getattr(dataset, attr) + noise_mat)
                             new_class_labels = getattr(dataset, "class_labels").clone()
-                            tmp_idx0 = (new_class_labels == 0).nonzero(as_tuple=True)[0].item()
+                            tmp_idx0 = (new_class_labels == 0).nonzero(as_tuple=True)[0][0].item()
                             new_class_labels[:tmp_idx0] = 0
                             new_class_labels[new_class_labels == OFF_MFLD_LABEL] = 1
                             setattr(dataset, attr, new_class_labels)
                     else:
                         setattr(dataset, attr, getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL])
+            print (idx, dataset.normed_all_points.shape)
             idx += 1
     elif (task == "regression") or (task == "clf" and not train_on_onmfld):
         for dataset in [train_set, val_set, test_set]:
@@ -328,7 +341,7 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
 
 @ex.capture
 def run_training(num_epochs, task, loss_func, lr, warmup,\
-     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log, online):
+     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log, online, adv_train, adv_train_params):
 
 
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
@@ -360,7 +373,7 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
     model, optimizer, scheduler, _, _ = lmd.train(model, optimizer, loss_function,\
         dataloaders, device, save_dir, scheduler, feature_name=ftname, target_name=tgtname,\
         num_epochs=num_epochs, task=task, name=name, scheduler_params=scheduler_params, \
-        specs_dict=None, debug=debug, online=online)
+        specs_dict=None, debug=debug, online=online, adv_train=adv_train, adv_train_params=adv_train_params)
 
     return model, optimizer, scheduler, datasets, dataloaders
 
