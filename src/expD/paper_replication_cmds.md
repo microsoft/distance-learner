@@ -5,14 +5,14 @@ First run the Distance Learner for the dataset that is similar to the one given 
 
 ```bash
 python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn30 \
  data.data_params.train.k=50 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
  data.data_params.train.g=0.3 \
- data.data_params.train.max_norm=0.12 \
+ data.data_params.train.max_norm=0.13 \
  data.data_params.train.bp=0.09 \
  data.data_params.train.M=1.0 \
  data.data_params.train.D=0.07 \
@@ -26,7 +26,7 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=1
  data.data_params.val.r=1 \
  data.data_params.val.g=0.3 \
  data.data_params.val.N=200000 \
- data.data_params.val.max_norm=0.12 \
+ data.data_params.val.max_norm=0.13 \
  data.data_params.val.bp=0.09 \
  data.data_params.val.M=1.0 \
  data.data_params.val.D=0.07 \
@@ -40,7 +40,7 @@ python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=1
  data.data_params.test.r=1 \
  data.data_params.test.g=0.3 \
  data.data_params.test.N=200000 \
- data.data_params.test.max_norm=0.12 \
+ data.data_params.test.max_norm=0.13 \
  data.data_params.test.bp=0.09 \
  data.data_params.test.M=1.0 \
  data.data_params.test.D=0.07 \
