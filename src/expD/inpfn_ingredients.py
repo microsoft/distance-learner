@@ -30,7 +30,9 @@ def inpfn_config():
 @inpfn_ingredient.capture
 def get_inp_fn(proj_dir, settings_to_analyze):
     inp_files = []
+    
     if type(settings_to_analyze) == dict:
+        print("hi")
         for data_tag in settings_to_analyze:
             for run in settings_to_analyze[data_tag]:
                 inp_files.append(os.path.join(proj_dir, data_tag, run))
