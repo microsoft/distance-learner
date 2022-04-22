@@ -14,6 +14,7 @@ def inpfn_config():
     #     "rdm_concspheres_k500n500_noninfdist": ["1", "2"]
     # }
     proj_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
+    settings_type = "dict"
     settings_to_analyze = {
         "rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn20": ["1"]
     }
@@ -28,9 +29,9 @@ def inpfn_config():
             proj_dir = settings["proj_dir"]
 
 @inpfn_ingredient.capture
-def get_inp_fn(proj_dir, settings_to_analyze):
+def get_inp_fn(proj_dir, settings_type, settings_to_analyze):
     inp_files = []
-    if type(settings_to_analyze) == dict:
+    if settings_type == "dict":
         for data_tag in settings_to_analyze:
             for run in settings_to_analyze[data_tag]:
                 inp_files.append(os.path.join(proj_dir, data_tag, run))
