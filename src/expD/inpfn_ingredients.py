@@ -16,7 +16,7 @@ def inpfn_config():
     proj_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
     settings_type = "dict"
     settings_to_analyze = {
-        "rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn20": ["1"]
+        "rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn30": ["1"]
     }
     # settings_to_analyze = [
     #     "rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=8e-2/1"
