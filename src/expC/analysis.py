@@ -12,7 +12,7 @@ from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls
 
 from utils.common import *
-from utils import plot_ittwswrolls
+from expC_utils import plot_ittwswrolls
 
 MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,

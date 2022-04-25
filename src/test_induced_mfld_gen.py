@@ -52,7 +52,7 @@ r = 1.0
 max_norm = 0.1
 debug = True
 
-k_neighbors = 50
+k_neighbors = k - 1 # dimension of local approximation of manifold must be as large as `k`
 
 test_on = 1000
 
