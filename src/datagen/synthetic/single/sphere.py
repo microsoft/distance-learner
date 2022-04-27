@@ -112,7 +112,7 @@ class RandomSphere(Manifold, Dataset):
                  n=100, k=3, r=10.0, D=50.0, max_norm=2.0, mu=10, sigma=5, seed=42,\
                  x_ck=None, rotation=None, translation=None, normalize=True,\
                  norm_factor=None, gamma=0.5, anchor=None, online=False,\
-                 off_online=False, augment=False):
+                 off_online=False, augment=False, inferred=False):
         """constructor for class containing a random sphere"""
 
         ## setting seed
@@ -126,7 +126,8 @@ class RandomSphere(Manifold, Dataset):
                  n=n, k=k, D=D, max_norm=max_norm, mu=mu, sigma=sigma,\
                  seed=seed, normalize=normalize, norm_factor=norm_factor,\
                  gamma=gamma, rotation=rotation, translation=translation,\
-                 anchor=anchor, online=online, off_online=off_online, augment=augment)
+                 anchor=anchor, online=online, off_online=off_online,\
+                 augment=augment, inferred=inferred)
 
         if not isinstance(specattrs, SpecificSphereAttrs):
             self._specattrs = SpecificSphereAttrs(mu=self._genattrs.mu,\
@@ -331,13 +332,14 @@ class RandomSphere(Manifold, Dataset):
             return points_k
         elif pre_images is not None:
             random_idx = np.random.randint(self._genattrs.N - self._genattrs.num_neg,\
-                 size=num_off_mfld_ex)
+                size=num_off_mfld_ex)
             # logger.info(random_idx)
             self._genattrs.pre_images_k = pre_images[random_idx]
             return pre_images[random_idx]            
 
         else:
             raise RuntimeError("expected `pre_images` but got None")
+
 
     def compute_normals(self):
         
@@ -464,26 +466,28 @@ class RandomSphere(Manifold, Dataset):
         return online_batch
 
     def compute_points(self):
-        
+
         self.gen_center()
         logger.info("[RandomSphere]: generated centre")
         self.gen_points()
         logger.info("[RandomSphere]: generated points in k-dim")
-        pre_images = self._genattrs.points_k if self._genattrs.augment else None
-        self.gen_pre_images(pre_images)
-        logger.info("[RandomSphere]: pre-images generated")
-        self.embed_in_n()
-        logger.info("[RandomSphere]: embedded the sphere in n-dim space")
+        
+        if not self.genattrs.inferred:
+            pre_images = self._genattrs.points_k if self._genattrs.augment else None
+            self.gen_pre_images(pre_images)
+            logger.info("[RandomSphere]: pre-images generated")
+            self.embed_in_n()
+            logger.info("[RandomSphere]: embedded the sphere in n-dim space")
 
-        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float() if not torch.is_tensor(self._genattrs.points_n) else self._genattrs.points_n
-        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float() if not torch.is_tensor(self._genattrs.points_k) else self._genattrs.points_k
-        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float() if not torch.is_tensor(self._genattrs.distances) else self._genattrs.distances
-        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float() if not torch.is_tensor(self._genattrs.actual_distances) else self._genattrs.actual_distances
+            self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float() if not torch.is_tensor(self._genattrs.points_n) else self._genattrs.points_n
+            self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float() if not torch.is_tensor(self._genattrs.points_k) else self._genattrs.points_k
+            self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float() if not torch.is_tensor(self._genattrs.distances) else self._genattrs.distances
+            self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float() if not torch.is_tensor(self._genattrs.actual_distances) else self._genattrs.actual_distances
 
-        if self._genattrs.normalize:
-            self.norm()
-            logger.info("[RandomSphere]: normalization complete")
-                
+            if self._genattrs.normalize:
+                self.norm()
+                logger.info("[RandomSphere]: normalization complete")
+                    
     def resample_points(self, seed=None):
         """to re-sample points on-the-fly at the end of each epoch"""
 

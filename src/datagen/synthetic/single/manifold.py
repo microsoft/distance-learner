@@ -32,7 +32,7 @@ class GeneralManifoldAttrs(object):
     def __init__(self, N=1000, num_neg=None, n=100, k=3, D=50.0,\
                  max_norm=2.0, mu=10, sigma=5, seed=42, normalize=True,\
                  norm_factor=1, gamma=0.5, anchor=None, rotation=None, translation=None,\
-                 online=False, off_online=False, augment=1,**kwargs):
+                 online=False, off_online=False, augment=1, inferred=False, **kwargs):
         """
         :param N: total number of samples
         :type N: int
@@ -66,10 +66,12 @@ class GeneralManifoldAttrs(object):
         :type numpy.array:
         :param online: create points online on the fly
         :type online: bool
-        :param off_online: bool
-        :type off_online: only off-manifold points are created on the fly
-        :param augment: float
-        :type augment: off-manifold points created from on-manifold on the fly (like augmentations) 
+        :param off_online: only off-manifold points are created on the fly
+        :type off_online: bool
+        :param augment: off-manifold points created from on-manifold on the fly (like augmentations) 
+        :type augment: float
+        :param inferred: if True, then off-manifold points formed from inferred manifold
+        :type inferred: bool
         """
 
         self._N = N
@@ -91,6 +93,7 @@ class GeneralManifoldAttrs(object):
         self._online = online
         self._off_online = off_online
         self._augment = augment
+        self._inferred = inferred
 
         self._anchor = anchor
 
@@ -222,6 +225,14 @@ class GeneralManifoldAttrs(object):
     def augment(self, x):
         raise RuntimeError("cannot set `augment` after instantiation!")
 
+    @property
+    def inferred(self):
+        return self._inferred
+
+    @inferred.setter
+    def inferred(self, x):
+        raise RuntimeError("cannot set `inferred` after instantiation!")
+
 
 class SpecificManifoldAttrs(ABC):
     """
@@ -334,7 +345,7 @@ class Manifold(ABC):
         else:
             self._specattrs = SpecificManifoldAttrs(**kwargs)
 
-        self.compute_points()
+        # self.compute_points()
 
     @property
     @abstractmethod

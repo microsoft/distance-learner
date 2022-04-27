@@ -1,16 +1,21 @@
+import multiprocessing
 import os
 import re
 import sys
 import json
 import copy
+import uuid
 import time
 import random
 import inspect
 from collections.abc import Iterable
 
 import numpy as np
-
+import scipy.linalg as spla
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
+
+import faiss
 
 import torch
 from torch.utils.data import Dataset
@@ -18,6 +23,7 @@ from torch.utils.data import Dataset
 from ..single.sphere import *
 
 from utils import *
+from datagen_utils import *
 
 logger = init_logger(__name__)
 
@@ -26,7 +32,8 @@ class ConcentricSpheres(Dataset):
     def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
                 sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
-                off_online=False, augment=False, **kwargs):
+                off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
+                max_t_delta=1e-3, recomp_tn=False, cache_dir="/tmp", **kwargs):
         """
         :param N: number of samples in the dataset
         :type N: int
@@ -74,12 +81,25 @@ class ConcentricSpheres(Dataset):
         :type off_online: bool
         :param augment: whether to treat off-manifold points generated on-the-fly as augmentations
         :type augment: bool
+        :param inferred: if True, then off-manifold points are generated from the inferred manifold
+        :type inferred: bool
+        :param nn: number of points to use for k_neighbors (default is `k-1`), when `inferred == True`
+        :type nn: int
+        :param buffer_nbhrs: buffer neighbors for reasons of PCA, when `inferred == True`
+        :type buffer_nbhrs: int
+        :param max_t_delta: maximum perturbation allowed in the tangential direction, when `inferred == True`
+        :type max_t_delta: float
+        :param recomp_tn: if True, then recompute tangents and normals for perturbed on-manifold points, when `inferred == True`
+        :type recomp_tn: bool
+        :param cache_dir: directory to cache auxillary attributes in order to free RAM
+        :type cache_dir: str
         """
 
         if seed is not None: seed_everything(seed)
 
         self._N = N
         self._num_neg = num_neg
+        self._num_pos = None if num_neg is None else N - num_neg
         self._n = n
         self._k = k
         self._D = D
@@ -94,6 +114,7 @@ class ConcentricSpheres(Dataset):
         self._online = online
         self._off_online = off_online
         self._augment = augment
+        self._inferred = inferred
         self._x_ck = x_ck
         if self._x_ck is None:
             self._x_ck = np.random.normal(self._mu, self._sigma, self._k)
@@ -112,6 +133,10 @@ class ConcentricSpheres(Dataset):
         self._gamma = gamma
         self._fix_center = None
         self._anchor = anchor
+
+        self._cache_dir = cache_dir
+        self._uuid = str(uuid.uuid4())
+        os.makedirs(os.path.join(self.cache_dir, self.uuid), exist_ok=True)
 
         self.S1 = None
         self.S2 = None
@@ -132,185 +157,167 @@ class ConcentricSpheres(Dataset):
         self.gamma = gamma
         self.fix_center = None
 
-    @property
-    def N(self):
-        return self._N
 
-    @N.setter
-    def N(self, N):
-        raise RuntimeError("cannot set `N` after instantiation")
+        ### only relevant when `self.inferred == True`###
 
-    @property
-    def num_neg(self):
-        return self._num_neg
+        self._nn = nn # neighborhood size for kNN
+        if self._nn is None:
+            self._nn = k - 1
+        self._buf_nn = buffer_nbhrs # no. of buffer neighbors
+        
+        self.knn = None # Faiss kNN object
+        self.new_knn = None # to store new Faiss object after tangential perturbations
+        
+        self.nn_indices = None
+        self.nn_distances = None
+        self.new_nn_indices = None
+        self.new_nn_distances = None
 
-    @num_neg.setter
-    def num_neg(self, x):
-        raise RuntimeError("cannot set `num_neg` after instantiation")
+        self._max_t_delta = max_t_delta # maximum tangential perturbation allowed
 
-    @property
-    def n(self):
-        return self._n
+        self.poca_idx = None # indices of points of closes approach in on-manifold points
+        self.new_poca = None # points of closest approach after applying tangential perturbations
+        self.new_poca_prturb_sizes = None # perturbation size of tangential perturbation
 
-    @n.setter
-    def n(self, x):
-        raise RuntimeError("cannot set `n` after instantiation")
+        self.on_mfld_pts_k_ = None # all on-manifold points
+        self.on_mfld_pts_trivial_ = None # trivial embeddings of on-manifold points
 
-    @property
-    def k(self):
-        return self._k
+        self._recomp_tn = recomp_tn
 
-    @k.setter
-    def k(self, x):
-        raise RuntimeError("cannot set `k` after instantiation")
-
-    @property
-    def D(self):
-        return self._D
-
-    @D.setter
-    def D(self, x):
-        raise RuntimeError("cannot set `D` after instantiation")
-
-    @property
-    def max_norm(self):
-        return self._max_norm
-
-    @max_norm.setter
-    def max_norm(self, x):
-        raise RuntimeError("cannot set `max_norm` after instantiation")
-
-    @property
-    def bp(self):
-        return self._bp
-
-    @bp.setter
-    def bp(self, x):
-        raise RuntimeError("cannpt set `bp` after instantiation")
-
-    @property
-    def M(self):
-        return self._M
-
-    @M.setter
-    def M(self, x):
-        raise RuntimeError("cannpt set `M` after instantiation")
-
-    @property
-    def mu(self):
-        return self._mu
-
-    @mu.setter
-    def mu(self, x):
-        raise RuntimeError("cannot set `mu` after instantiation")
-
-    @property
-    def sigma(self):
-        return self._sigma
-
-    @sigma.setter
-    def sigma(self, x):
-        raise RuntimeError("cannot set `sigma` after instantiation")
-
-    @property
-    def seed(self):
-        return self._seed
-
-    @seed.setter
-    def seed(self, x):
-        raise RuntimeError("cannot set `seed` after instantiation")
+        self.tn_fn = os.path.join(self.cache_dir, self.uuid, "tangents_and_normals_to_poca") # cache directory to dump tangents and normals
     
-    @property
-    def rotation(self):
-        return self._rotation
+    def _make_poca_idx(self):
+        self.poca_idx =  np.zeros(self.num_neg, dtype=np.int64)
+        self.poca_idx[:self.num_pos] = np.arange(min(self.num_pos, self.num_neg), dtype=np.int64)
+        self.poca_idx[self.num_pos:] = np.random.choice(np.arange(self.num_pos, dtype=np.int64), size=max(0, self.num_neg - self.num_pos), replace=True).astype(np.int64) 
 
-    @rotation.setter
-    def rotation(self, x):
-        raise RuntimeError("cannot set `rotation` after instantiation!")
+    def _collect_on_mfld_k(self):
+        self.on_mfld_pts_k_ = np.zeros((self.N, self.k))
+        num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+        self.on_mfld_pts_k_[:num_on_mfld_S1] = self.S1.genattrs.points_k
+        self.on_mfld_pts_k_[num_on_mfld_S1:] = self.S2.genattrs.points_k
 
-    @property
-    def translation(self):
-        return self._translation
+    def _inf_setup(self):
+        """setting up data for off manifold samples when computing inferred manifold"""
+        self._make_poca_idx()
+        self._collect_on_mfld_k()
+        
 
-    @translation.setter
-    def traslation(self, x):
-        raise RuntimeError("cannot set `translation` after instantiation!")
+    def find_knn(self, X, use_new=False):
+        """
+            get k-nearest neighbors of on-manifold points in n-dims
+            if `use_new == True`, then use `self.new_knn` for computation
+            that is trained on `self.new_poca`
+        """
+        if not use_new:
+            if self.knn is None:
+                self.knn = FaissKNeighbors(k=self.nn + self.buf_nn)
+                self.knn.fit(self.on_mfld_pts_trivial_)
+            distances, indices = self.knn.predict(X)
+        else:
+            if self.new_knn is None:
+                self.new_knn = FaissKNeighbors(k=self.nn + self.buf_nn)
+                self.new_knn.fit(self.new_poca)
+            distances, indices = self.new_knn.predict(X)
 
-    @property
-    def x_ck(self):
-        return self._x_ck
+        return distances, indices
 
-    @x_ck.setter
-    def x_ck(self, x_ck):
-        raise RuntimeError("cannot set `x_ck` after instantiation!")
+    def _make_perturbed_poca_for_idx(self, idx):
 
-    @property
-    def x_cn(self):
-        return self._x_cn
+        prturb_size = 0
 
-    @x_cn.setter
-    def x_cn(self, x_cn):
-        raise RuntimeError("cannot set `x_cn` after instantiation!")
+        if idx < self.num_pos:
+            # one copy of poca should be unperturbed
+            return (idx, self.poca[idx], prturb_size)
 
-    @property
-    def r(self):
-        return self._r
+        on_mfld_pt = self.poca[idx]
 
-    @r.setter
-    def r(self, r):
-        raise RuntimeError("cannot set `r` after instantiation!")
+        nbhr_indices = None
+        nbhr_dists = None
+        if self.nn_indices is None or self.nn_distances is None:
+            nbhr_dists, nbhr_indices = self.knn.predict(self.poca[idx].reshape(-1, 1))
+            nbhr_dists = nbhr_dists[0]
+            nbhr_indices = nbhr_indices[0]
+        else:
+            nbhr_indices = self.nn_indices[idx]
+            nbhr_dists = self.nn_distances[idx]
 
-    @property
-    def g(self):
-        return self._g
+        if self.poca_idx[idx] in nbhr_indices:
+            nbhr_indices = nbhr_indices[nbhr_indices != self.poca_idx[idx]]
+        else:
+            nbhr_indices = nbhr_indices[:-1]
 
-    @g.setter
-    def g(self, g):
-        raise RuntimeError("cannot set `g` after instantiation!")
+        nbhrs = self.on_mfld_pts_k_[nbhr_indices]
+        nbhr_local_coords = nbhrs - on_mfld_pt
+        
 
-    @property
-    def anchor(self):
-        return self._anchor
+        pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
+        pca.fit(nbhr_local_coords)
 
-    @anchor.setter
-    def anchor(self, anchor):
-        raise RuntimeError("cannot set `anchor` after instantiation!")
+        tangential_dirs = pca.components_
+        normal_dirs = spla.null_space(tangential_dirs).T
 
-    @property
-    def online(self):
-        return self._online
+        tangential_dirs += on_mfld_pt
+        normal_dirs += on_mfld_pt
 
-    @online.setter
-    def online(self, online):
-        raise RuntimeError("cannot set `online` after instantiation!")
-    
-    @property
-    def off_online(self):
-        return self._off_online
+        rdm_coeffs = np.random.normal(0, 1, size=tangential_dirs.shape[0])
+        delta = np.sum(rdm_coeffs.reshape(-1, 1) * tangential_dirs, axis=0)
 
-    @off_online.setter
-    def off_online(self, off_online):
-        raise RuntimeError("cannot set `off_online` after instantiation!")
+        prturb_size = np.random.uniform(1e-8, self.max_t_delta)
+        delta = (prturb_size / np.linalg.norm(delta, ord=2)) * delta
 
-    @property
-    def augment(self):
-        return self._augment
+        prturb_poca = on_mfld_pt + delta
 
-    @augment.setter
-    def augment(self, augment):
-        raise RuntimeError("cannot set `augment` after instantiation!")
+        return (idx, prturb_poca, prturb_size)
+
+    def make_perturbed_poca(self):
+
+        self.nn_distances, self.nn_indices = self.find_knn(self.poca)
+
+        with multiprocessing.Pool(processes=24) as pool:
+            results = pool.map(self._make_perturbed_poca_for_idx, range(self.num_neg))
+
+        for i in range(self.num_neg):
+            # self.new_poca[i] = results[i][1]
+
+            if self.new_poca is None:
+                self.new_poca = np.zeros((self.S1.genattrs.num_neg + self.S2.genattrs.num_neg, self.n))
+            if self.new_poca_prturb_sizes is None:
+                self.new_poca_prturb_sizes = np.zeros(self.S1.genattrs.num_neg + self.S2.genattrs.num_neg) 
+            if self.class_labels is None:
+                self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+            
+            tmp = i
+            if i > self.S1.genattrs.num_neg:
+                tmp += (self.S1.genattrs.N - self.S1.genattrs.num_neg)
+
+            self.new_poca[i] = results[i][1] 
+
+            self.class_labels[tmp] = 2
+
+    def _make_off_mfld_eg_for_idx(self, idx):
+        
+        on_mfld_pt = self.new_poca[idx]
+        
+
+        
+
+
 
     def compute_points(self):
 
         tot_count_per_mfld = self._N // 2
         neg_count_per_mfld = self._num_neg // 2 if self._num_neg is not None else None
 
+        self._num_neg = 2 * neg_count_per_mfld
+        self._num_pos = self._N - self._num_neg
+
         s_gamma = 0.5 if self._gamma is 0 else self._gamma # gamma = 0 needed for concentric spheres but throws error with constituent spheres
         self.S1 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, r=self._r, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
             normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
-            off_online=self._off_online, augment=self._augment)
+            off_online=self._off_online, augment=self._augment, inferred=self._inferred)
 
         self.S1.compute_points()
         logger.info("[ConcentricSpheres]: Generated S1")
@@ -321,13 +328,15 @@ class ConcentricSpheres(Dataset):
             k=self._k, r=self._r + self._g, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
             seed=None, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
             normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
-            off_online=self._off_online, augment=self._augment)
+            off_online=self._off_online, augment=self._augment, inferred=self._inferred)
 
         self.S2.compute_points()
         assert (self._x_cn == self.S2.specattrs.x_cn).all() == True
         logger.info("[ConcentricSpheres]: Generated S2")
 
-        self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
+        self.all_points = np.zeros((self.N, self.n))
+        self.all_points[:self.S1.genattrs.n] = self.S1.genattrs.points_n.numpy()
+        self.all_points[self.S1.genattrs.n:] = self.S2.genattrs.points_n.numpy()
         
         self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
         self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
@@ -604,6 +613,8 @@ class ConcentricSpheres(Dataset):
     def save_data(self, save_dir):
 
         os.makedirs(save_dir, exist_ok=True)
+        S1_dir = None
+        S2_dir = None
         if self.N < 1e+7:
             S1_dir = os.path.join(save_dir, "S1_dump")
             S2_dir = os.path.join(save_dir, "S2_dump")
@@ -787,6 +798,251 @@ class ConcentricSpheres(Dataset):
         return batch
 
     
-        
+    @property
+    def N(self):
+        return self._N
 
+    @N.setter
+    def N(self, N):
+        raise RuntimeError("cannot set `N` after instantiation")
 
+    @property
+    def num_neg(self):
+        return self._num_neg
+
+    @num_neg.setter
+    def num_neg(self, x):
+        raise RuntimeError("cannot set `num_neg` after instantiation")
+
+    @property
+    def num_pos(self):
+        return self._num_pos
+
+    @num_pos.setter
+    def num_pos(self, x):
+        raise RuntimeError("cannot set `num_pos` after instantiation")
+
+    @property
+    def n(self):
+        return self._n
+
+    @n.setter
+    def n(self, x):
+        raise RuntimeError("cannot set `n` after instantiation")
+
+    @property
+    def k(self):
+        return self._k
+
+    @k.setter
+    def k(self, x):
+        raise RuntimeError("cannot set `k` after instantiation")
+
+    @property
+    def D(self):
+        return self._D
+
+    @D.setter
+    def D(self, x):
+        raise RuntimeError("cannot set `D` after instantiation")
+
+    @property
+    def max_norm(self):
+        return self._max_norm
+
+    @max_norm.setter
+    def max_norm(self, x):
+        raise RuntimeError("cannot set `max_norm` after instantiation")
+
+    @property
+    def bp(self):
+        return self._bp
+
+    @bp.setter
+    def bp(self, x):
+        raise RuntimeError("cannpt set `bp` after instantiation")
+
+    @property
+    def M(self):
+        return self._M
+
+    @M.setter
+    def M(self, x):
+        raise RuntimeError("cannpt set `M` after instantiation")
+
+    @property
+    def mu(self):
+        return self._mu
+
+    @mu.setter
+    def mu(self, x):
+        raise RuntimeError("cannot set `mu` after instantiation")
+
+    @property
+    def sigma(self):
+        return self._sigma
+
+    @sigma.setter
+    def sigma(self, x):
+        raise RuntimeError("cannot set `sigma` after instantiation")
+
+    @property
+    def seed(self):
+        return self._seed
+
+    @seed.setter
+    def seed(self, x):
+        raise RuntimeError("cannot set `seed` after instantiation")
+    
+    @property
+    def rotation(self):
+        return self._rotation
+
+    @rotation.setter
+    def rotation(self, x):
+        raise RuntimeError("cannot set `rotation` after instantiation!")
+
+    @property
+    def translation(self):
+        return self._translation
+
+    @translation.setter
+    def traslation(self, x):
+        raise RuntimeError("cannot set `translation` after instantiation!")
+
+    @property
+    def x_ck(self):
+        return self._x_ck
+
+    @x_ck.setter
+    def x_ck(self, x_ck):
+        raise RuntimeError("cannot set `x_ck` after instantiation!")
+
+    @property
+    def x_cn(self):
+        return self._x_cn
+
+    @x_cn.setter
+    def x_cn(self, x_cn):
+        raise RuntimeError("cannot set `x_cn` after instantiation!")
+
+    @property
+    def r(self):
+        return self._r
+
+    @r.setter
+    def r(self, r):
+        raise RuntimeError("cannot set `r` after instantiation!")
+
+    @property
+    def g(self):
+        return self._g
+
+    @g.setter
+    def g(self, g):
+        raise RuntimeError("cannot set `g` after instantiation!")
+
+    @property
+    def anchor(self):
+        return self._anchor
+
+    @anchor.setter
+    def anchor(self, anchor):
+        raise RuntimeError("cannot set `anchor` after instantiation!")
+
+    @property
+    def online(self):
+        return self._online
+
+    @online.setter
+    def online(self, online):
+        raise RuntimeError("cannot set `online` after instantiation!")
+    
+    @property
+    def off_online(self):
+        return self._off_online
+
+    @off_online.setter
+    def off_online(self, off_online):
+        raise RuntimeError("cannot set `off_online` after instantiation!")
+
+    @property
+    def augment(self):
+        return self._augment
+
+    @augment.setter
+    def augment(self, augment):
+        raise RuntimeError("cannot set `augment` after instantiation!")
+
+    @property
+    def inferred(self):
+        return self._inferred
+
+    @inferred.setter
+    def inferred(self, inferred):
+        raise RuntimeError("cannot set `inferred` after instantiation!")
+
+    @property
+    def nn(self):
+        return self._nn
+
+    @nn.setter
+    def nn(self, nn):
+        raise RuntimeError("cannot set `nn` after instantiation!")
+
+    @property
+    def buf_nn(self):
+        return self._buf_nn
+
+    @buf_nn.setter
+    def buf_nn(self, buf_nn):
+        raise RuntimeError("cannot set `buf_nn` after instantiation!")
+
+    @property
+    def max_t_delta(self):
+        return self._max_t_delta
+
+    @max_t_delta.setter
+    def max_t_delta(self, max_t_delta):
+        raise RuntimeError("cannot set `max_t_delta` after instantiation!")
+
+    @property
+    def recomp_tn(self):
+        return self._recomp_tn
+
+    @recomp_tn.setter
+    def recomp_tn(self, recomp_tn):
+        raise RuntimeError("cannot set `recomp_tn` after instantiation!")
+
+    @property
+    def cache_dir(self):
+        return self.cache_dir
+
+    @cache_dir.setter
+    def cache_dir(self, x):
+        raise RuntimeError("cannot set `cache_dir` after instantiation!")
+
+    @property
+    def uuid(self):
+        return self.uuid
+
+    @uuid.setter
+    def uuid(self, x):
+        raise RuntimeError("cannot set `uuid` after instantiation!")
+
+    @property
+    def poca(self, idx=None):
+        if idx is None:
+            x = np.zeros((self.on_mfld_pts_k_.shape[0], self.n))
+            x[:, :self.k] = self.on_mfld_pts_k_
+            return x
+
+        elif isinstance(idx, Iterable):
+            x = np.zeros((len(idx), self.n))
+            x[:, :self.k] = self.on_mfld_pts_k_[idx]
+            return x
+
+        else:
+            x = np.zeros(self.n)
+            x[:self.k] = self.on_mfld_pts_k_[idx]
+            return x
