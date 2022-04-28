@@ -46,6 +46,9 @@ class TensorShardsDataset(Dataset):
      
      to fetch populated elements do dump["chunk"][:dump["end_offset"]]
      for ease of debugging, chunks are initialized with np.nan
+
+     CAUTION: don't add points to it in a parallelized fashion; compute
+     points parallely but append sequentially
     """
     def __init__(self,\
                  root_dir,\
@@ -66,6 +69,8 @@ class TensorShardsDataset(Dataset):
         
         self.chunk = np.zeros((self.chunk_size, *self.data_shape))
         self.chunk[:] = np.nan
+
+        self.cache_dump = None
         
         if data is not None:
             flush_it = False
@@ -73,6 +78,8 @@ class TensorShardsDataset(Dataset):
                 if i == len(data) - 1:
                     flush_it = True
                 self.append(data[i], flush_it)
+
+        self.is_flushed = False
     
     def append(self, pt, flush_it=False):
         
@@ -80,6 +87,8 @@ class TensorShardsDataset(Dataset):
         self.cur_idx += 1
         self.cur_len += 1
         
+        self.is_flushed = False
+
         if self.cur_len % self.chunk_size == 0 and self.cur_idx == self.chunk_size:
             self.flush_chunk()
         
@@ -103,7 +112,7 @@ class TensorShardsDataset(Dataset):
         key_to_dump_in = self.cur_len // self.chunk_size # which multiple of self.chunk_size is currently running
         if self.cur_len % self.chunk_size == 0:
             if self.cur_len == 0:
-                raise RunTimeWarning("no data to flush!")
+                raise RuntimeWarning("no data to flush!")
             else:
                 key_to_dump_in -= 1
         
@@ -120,7 +129,7 @@ class TensorShardsDataset(Dataset):
 
             assert load_start == key_to_dump_in * self.chunk_size
             assert load_end_offset <= self.cur_idx
-            assert (load_chunk[:load_end] == self.chunk[:load_end]).all() == True, "loaded chunk not same as data to be dumped!"
+            assert (load_chunk[:load_end_offset] == self.chunk[:load_end_offset]).all() == True, "loaded chunk not same as data to be dumped!"
             
             key = key_to_dump_in
             start_idx = self.verbose_map[key_to_dump_in]["start_idx"]
@@ -152,20 +161,29 @@ class TensorShardsDataset(Dataset):
         if self.cur_idx == self.chunk_size: # chunk was full before dumping
             self.chunk[:] = np.nan # reset chunk
             self.cur_idx = 0 # reset current index so that new element is inserted at start        
-                
+        
+        self.is_flushed = True
     
     def __getitem__(self, idx):
-        # print(idx)
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
+
+        if idx > self.cur_len:
+            raise IndexError("idx ({}) > .cur_len attribute".format(idx, self.cur_len))
             
         key_to_load = idx // self.chunk_size
         idx_to_load = idx % self.chunk_size
         
+        if key_to_load not in self.map:
+            # this means the required id is in self.chunk
+            if idx_to_load >= self.cur_idx:
+                raise IndexError("idx_to_load exceeds .cur_idx attribute")
         fn = self.map[key_to_load]
-        
-        loaded_chunk = torch.load(fn)
-        return loaded_chunk["chunk"][idx_to_load]
+
+        if not (key_to_load == self.cache_dump["key"] and idx_to_load >= self.cache_dump["start_idx"]):
+            self.cache_dump = torch.load(fn)
+        if idx_to_load > self.cache_dump["start_idx"] + self.cache_dump["end_offset"]:
+            raise IndexError("idx out of bounds")
+
+        return self.cache_dump["chunk"][idx_to_load]
     
         
     def __len__(self):

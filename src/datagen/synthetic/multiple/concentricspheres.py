@@ -20,6 +20,8 @@ import faiss
 import torch
 from torch.utils.data import Dataset
 
+from tqdm import tqdm
+
 from ..single.sphere import *
 
 from utils import *
@@ -33,7 +35,7 @@ class ConcentricSpheres(Dataset):
                 sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
-                max_t_delta=1e-3, recomp_tn=False, cache_dir="/tmp", **kwargs):
+                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", **kwargs):
         """
         :param N: number of samples in the dataset
         :type N: int
@@ -91,6 +93,8 @@ class ConcentricSpheres(Dataset):
         :type max_t_delta: float
         :param recomp_tn: if True, then recompute tangents and normals for perturbed on-manifold points, when `inferred == True`
         :type recomp_tn: bool
+        :param use_new_knn: if True, use .new_knn for tangent and normal recomputation, when `inferred == True`
+        :type use_new_knn: bool
         :param cache_dir: directory to cache auxillary attributes in order to free RAM
         :type cache_dir: str
         """
@@ -183,9 +187,40 @@ class ConcentricSpheres(Dataset):
         self.on_mfld_pts_trivial_ = None # trivial embeddings of on-manifold points
 
         self._recomp_tn = recomp_tn
+        self._use_new_knn = use_new_knn
 
-        self.tn_fn = os.path.join(self.cache_dir, self.uuid, "tangents_and_normals_to_poca") # cache directory to dump tangents and normals
-    
+        self.tn_dir = None
+        self.new_poca_dir = None
+        self.tn_dset = None
+        self.new_poca_dset = None
+
+        if not self.online:
+            self.tang_dir = os.path.join(self.cache_dir, self.uuid, "tangents_at_poca") # cache directory to dump tangents and normals
+            self.norm_dir = os.path.join(self.cache_dir, self.uuid, "normals_at_poca") # cache directory to dump tangents and normals
+
+            self.new_poca_dir = os.path.join(self.cache_dir, self.uuid, "new_poca") # cache directory to store new poca
+
+            self.tang_dset = TensorShardsDataset(
+                root_dir=self.tang_dir,
+                data_shape=(self.k-1, self.n),
+                data=None,
+                chunk_size=50000
+            )
+
+            self.norm_dset = TensorShardsDataset(
+                root_dir=self.tang_dir,
+                data_shape=(self.n - self.k + 1, self.n),
+                data=None,
+                chunk_size=50000
+            )
+
+            self.new_poca_dset = TensorShardsDataset(
+                root_dir=self.new_poca_dir,
+                data_shape=(self.n,),
+                data=None,
+                chunk_size=50000
+            )
+
     def _make_poca_idx(self):
         self.poca_idx =  np.zeros(self.num_neg, dtype=np.int64)
         self.poca_idx[:self.num_pos] = np.arange(min(self.num_pos, self.num_neg), dtype=np.int64)
@@ -196,6 +231,9 @@ class ConcentricSpheres(Dataset):
         num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
         self.on_mfld_pts_k_[:num_on_mfld_S1] = self.S1.genattrs.points_k
         self.on_mfld_pts_k_[num_on_mfld_S1:] = self.S2.genattrs.points_k
+        if self.N < 1e+7:
+            self.on_mfld_pts_trivial_ = np.zeros((self.n, self.k))
+            self.on_mfld_pts_trivial_[:, self.k] = self.on_mfld_pts_k_
 
     def _inf_setup(self):
         """setting up data for off manifold samples when computing inferred manifold"""
@@ -212,17 +250,85 @@ class ConcentricSpheres(Dataset):
         if not use_new:
             if self.knn is None:
                 self.knn = FaissKNeighbors(k=self.nn + self.buf_nn)
-                self.knn.fit(self.on_mfld_pts_trivial_)
+                to_fit = self.on_mfld_pts_trivial_
+                if self.on_mfld_pts_trivial_ is None:
+                    to_fit = np.zeros((self.N, self.n))
+                    to_fit[:, self.k] = self.on_mfld_pts_k_
+                self.knn.fit(to_fit)
             distances, indices = self.knn.predict(X)
         else:
             if self.new_knn is None:
                 self.new_knn = FaissKNeighbors(k=self.nn + self.buf_nn)
-                self.new_knn.fit(self.new_poca)
+                self.new_knn.fit(self.new_poca_dset[:])
             distances, indices = self.new_knn.predict(X)
 
         return distances, indices
 
-    def _make_perturbed_poca_for_idx(self, idx):
+    def _get_tn_for_on_mfld_idx(self, idx):
+        """compute tangential and normal directions for all on-manifold points"""
+        if self.nn_indices is None or self.nn_distances is None:
+            raise RuntimeError("knn's not predicted yet!")
+
+        on_mfld_pt = None
+        if self.on_mfld_pts_trivial_ is None:
+            on_mfld_pt = np.zeros(self.n)
+            on_mfld_pt[:, self.k] = self.on_mfld_pts_k_[idx]
+        else:
+            on_mfld_pt = self.on_mfld_pts_trivial_[idx]
+        nbhr_indices = self.nn_indices[idx]
+        nbhr_dists = self.nn_distances[idx]
+
+        if idx in nbhr_indices:
+            nbhr_indices = nbhr_indices[nbhr_indices != idx]
+        else:
+            nbhr_indices = nbhr_indices[:-1]
+
+        nbhrs = None
+        if self.on_mfld_pts_trivial_ is None:
+            nbhrs = np.zeros((nbhr_indices.shape[0], self.n))
+            nbhrs[:, self.k] = self.on_mfld_pts_k[nbhr_indices]
+        else:
+            nbhrs = self.on_mfld_pts_trivial_[nbhr_indices]
+        
+        nbhr_local_coords = nbhrs - on_mfld_pt
+
+        pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
+        pca.fit(nbhr_local_coords)
+
+        tangential_dirs = pca.components_
+        normal_dirs = spla.null_space(tangential_dirs).T
+
+        tangential_dirs += on_mfld_pt
+        normal_dirs += on_mfld_pt
+
+        return (idx, tangential_dirs, normal_dirs)
+
+    def get_tn_for_on_mfld_pts(self, pp_chunk_size=50000):
+        """
+        make tangents and normals and store them in shard tensors for on-manifold points
+
+        :param pp_chunk_size: chunk size for parallel processing
+        """
+
+        if self.nn_distances is None or self.nn_indices is None:
+            X = self.on_mfld_pts_trivial_
+            if self.on_mfld_pts_trivial_ is None:
+                X = np.zeros((self.N, self.n))
+                X[:, self.k] = self.on_mfld_pts_k_
+            self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
+        
+        for i in tqdm(range(0, self.num_pos, pp_chunk_size)):
+            with multiprocessing.Pool(processes=24) as pool:
+                results = pool.map(self._get_tn_for_on_mfld_idx, range(i, min(i + pp_chunk_size, self.num_pos)))
+
+            flush_it = False
+            for j in range(i, min(i + pp_chunk_size, self.num_pos)):
+                if j == min(i + pp_chunk_size, self.num_pos) - 1:
+                    flush_it = True
+                self.tang_dset.append(results[j][1], flush_it)
+                self.norm_dset.append(results[j][2], flush_it)
+
+    def _make_perturbed_poca_for_idx(self, idx, return_all=False):
 
         prturb_size = 0
 
@@ -239,26 +345,32 @@ class ConcentricSpheres(Dataset):
             nbhr_dists = nbhr_dists[0]
             nbhr_indices = nbhr_indices[0]
         else:
-            nbhr_indices = self.nn_indices[idx]
-            nbhr_dists = self.nn_distances[idx]
+            # since .nn_indices and .nn_dists are computed over on_mfld_pts_trivial_
+            # therefore we search for indices and dists using poca_idx[idx]
+            nbhr_indices = self.nn_indices[self.poca_idx[idx]]
+            nbhr_dists = self.nn_distances[self.poca_idx[idx]]
 
         if self.poca_idx[idx] in nbhr_indices:
             nbhr_indices = nbhr_indices[nbhr_indices != self.poca_idx[idx]]
         else:
             nbhr_indices = nbhr_indices[:-1]
 
-        nbhrs = self.on_mfld_pts_k_[nbhr_indices]
+        nbhrs = np.zeros((nbhr_indices.shape[0], self.n))
+        nbhrs[:, self.k] = self.on_mfld_pts_k[nbhr_indices]
         nbhr_local_coords = nbhrs - on_mfld_pt
         
 
-        pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
-        pca.fit(nbhr_local_coords)
+        # pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
+        # pca.fit(nbhr_local_coords)
 
-        tangential_dirs = pca.components_
-        normal_dirs = spla.null_space(tangential_dirs).T
+        # tangential_dirs = pca.components_
+        # normal_dirs = spla.null_space(tangential_dirs).T
 
-        tangential_dirs += on_mfld_pt
-        normal_dirs += on_mfld_pt
+        # tangential_dirs += on_mfld_pt
+        # normal_dirs += on_mfld_pt
+
+        tangential_dirs = self.tang_dset[self.poca_idx[idx]]
+        normal_dirs = self.norm_dset[self.poca_idx[idx]]
 
         rdm_coeffs = np.random.normal(0, 1, size=tangential_dirs.shape[0])
         delta = np.sum(rdm_coeffs.reshape(-1, 1) * tangential_dirs, axis=0)
@@ -267,42 +379,194 @@ class ConcentricSpheres(Dataset):
         delta = (prturb_size / np.linalg.norm(delta, ord=2)) * delta
 
         prturb_poca = on_mfld_pt + delta
-
+        if return_all:
+            return (
+                idx,
+                prturb_poca,
+                prturb_size, 
+                tangential_dirs,
+                normal_dirs
+            )
         return (idx, prturb_poca, prturb_size)
 
-    def make_perturbed_poca(self):
+    def make_perturbed_poca(self, pp_chunk_size=50000):
+        """
+        :param pp_chunk_size: chunk size for parallel processing
+        """
+        # X = self.on_mfld_pts_trivial_[self.poca_idx] if self.on_mfld_pts_trivial_ is not None else None
+        # if self.on_mfld_pts_trivial_ is None:
+        #     Z = np.zeros((self.N, self.n))
+        #     Z[:, self.k] = self.on_mfld_pts_k_
+        #     X = Z[self.poca_idx]
 
-        self.nn_distances, self.nn_indices = self.find_knn(self.poca)
-
-        with multiprocessing.Pool(processes=24) as pool:
-            results = pool.map(self._make_perturbed_poca_for_idx, range(self.num_neg))
-
-        for i in range(self.num_neg):
-            # self.new_poca[i] = results[i][1]
-
-            if self.new_poca is None:
-                self.new_poca = np.zeros((self.S1.genattrs.num_neg + self.S2.genattrs.num_neg, self.n))
-            if self.new_poca_prturb_sizes is None:
-                self.new_poca_prturb_sizes = np.zeros(self.S1.genattrs.num_neg + self.S2.genattrs.num_neg) 
-            if self.class_labels is None:
-                self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
-            
-            tmp = i
-            if i > self.S1.genattrs.num_neg:
-                tmp += (self.S1.genattrs.N - self.S1.genattrs.num_neg)
-
-            self.new_poca[i] = results[i][1] 
-
-            self.class_labels[tmp] = 2
-
-    def _make_off_mfld_eg_for_idx(self, idx):
-        
-        on_mfld_pt = self.new_poca[idx]
-        
+        if self.nn_distances is None or self.nn_indices is None:
+            Y = self.on_mfld_pts_trivial_ if self.on_mfld_pts_trivial_ is not None else None
+            if Y is None:
+                Y = np.zeros((self.N, self.n))
+                Y[:, self.k] = self.on_mfld_pts_k_
+            self.nn_distances, self.nn_indices = self.find_knn(Y)
 
         
 
+        for i in tqdm(range(0, self.num_neg, pp_chunk_size)):
+            with multiprocessing.Pool(processes=24) as pool:
+                results = pool.map(self._make_perturbed_poca_for_idx, range(i, min(i + pp_chunk_size, self.num_neg)))
+        
+            flush_it=False
+            end_j = min(i + pp_chunk_size, self.num_neg)
+            for j in range(i, end_j):
+                # self.new_poca[i] = results[i][1]
+                if j == end_j - 1:
+                    flush_it=True 
+                self.new_poca_dset.append(results[j][1], flush_it)
 
+                # if self.new_poca is None:
+                #     self.new_poca = np.zeros((self.S1.genattrs.num_neg + self.S2.genattrs.num_neg, self.n))
+                if self.new_poca_prturb_sizes is None:
+                    self.new_poca_prturb_sizes = np.zeros(self.S1.genattrs.num_neg + self.S2.genattrs.num_neg) 
+                if self.class_labels is None:
+                    self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+                
+                tmp = j
+                if j > self.S1.genattrs.num_neg:
+                    tmp += (self.S1.genattrs.N - self.S1.genattrs.num_neg)
+
+                # self.new_poca[i] = results[i][1] 
+                self.new_poca_prturb_sizes[j] = results[j][2]
+
+                self.class_labels[tmp] = 2
+
+    def _make_off_mfld_eg_for_idx(self, idx, return_all=False):
+        
+        on_mfld_pt = self.new_poca_dset[idx]
+
+        tangential_dirs = None
+        normal_dirs = None
+
+        if self.recomp_tn:
+
+            new_nbhr_indices = None
+            new_nbhr_dists = None
+
+            if self.new_nn_distances is None or self.new_nn_indices is None:
+                if self.use_new_knn:
+                    self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:], use_new=True)
+                else:
+                    self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:], use_new=False)
+
+            if self.new_nn_indices is None or self.new_nn_distances is None:
+                new_nbhr_dists, new_nbhr_indices = self.knn.predict(self.poca[idx].reshape(-1, 1))
+                new_nbhr_dists = new_nbhr_dists[0]
+                new_nbhr_indices = new_nbhr_indices[0]
+            else:
+                # since nn_indices and nn_dists are computed over on_mfld_pts_trivial_
+                # therefore we search for indices and dists using poca_idx[idx]
+                tmp = idx if self.use_new_knn else self.poca_idx[idx]
+                new_nbhr_indices = self.new_nn_indices[tmp]
+                new_nbhr_dists = self.new_nn_distances[tmp]
+
+            if idx < self.num_pos and self.poca_idx[idx] in new_nbhr_indices:
+                new_nbhr_indices = new_nbhr_indices[new_nbhr_indices != self.poca_idx[idx]]
+            else:
+                new_nbhr_indices = new_nbhr_indices[:-1]
+
+            new_nbhrs = np.zeros((self.nn + self.buf_nn, self.n))
+
+            if self.use_new_knn:
+                for nbhr_idx in new_nbhr_indices:
+                    new_nbhrs[nbhr_idx] = self.new_poca_dset[nbhr_idx]
+            else:
+                new_nbhrs[:, :self.k] = self.on_mfld_pts_k_[new_nbhr_indices]
+
+            new_nbhr_local_coords = new_nbhrs - on_mfld_pt
+
+            pca = PCA(n_components=self.k - 1)
+            pca.fit(new_nbhr_local_coords)
+
+            tangential_dirs = pca.components_
+            normal_dirs = spla.null_space(tangential_dirs).T
+
+            tangential_dirs += on_mfld_pt
+            normal_dirs += on_mfld_pt
+
+        else:
+
+            tangential_dirs = self.tang_dset[self.poca_idx[idx]]
+            normal_dirs = self.norm_dset[self.poca_idx[idx]]
+
+
+        rdm_coeffs = np.random.normal(0, 1, size=normal_dirs.shape[0])
+        off_mfld_pt = np.sum(rdm_coeffs.reshape(-1, 1) * normal_dirs, axis=0)
+        rdm_norm = np.random.uniform(0, self.max_norm)
+        off_mfld_pt = off_mfld_pt * (rdm_norm / np.linalg.norm(off_mfld_pt))
+        off_mfld_pt += on_mfld_pt
+
+
+        if return_all:
+            return (
+                idx, 
+                off_mfld_pt,
+                rdm_norm,
+                tangential_dirs,
+                normal_dirs
+            )
+        return (idx, off_mfld_pt, rdm_norm)
+
+    def make_inferred_off_mfld_eg(self, pp_chunk_size=50000):
+        """
+        :param pp_chunk_size: chunk size for parallel processing
+        """
+        if self.new_nn_distances is None or self.new_nn_indices is None:
+            self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:])
+
+        for i in tqdm(range(0, self.num_neg, pp_chunk_size)):
+            with multiprocessing.Pool(processes=24) as pool:
+                results = pool.map(self._make_off_mfld_eg_for_idx, range(i, min(i + pp_chunk_size, self.num_neg)))
+        
+            end_j = min(i + pp_chunk_size, self.num_neg)
+            for j in range(i, end_j):
+                self.all_points[j] = results[j][1]
+                
+                if self.all_actual_distances is None:
+                    self.all_actual_distances = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N) 
+                
+                tmp = j
+                if j > self.S1.genattrs.num_neg:
+                    tmp += (self.S1.genattrs.N - self.S1.genattrs.num_neg)
+
+                # self.new_poca[i] = results[i][1] 
+                self.all_actual_distances[tmp] = results[j][2]
+
+    def compute_inferred_points(self):
+
+        self._inf_setup()
+        self.get_tn_for_on_mfld_pts(pp_chunk_size=50000)
+        if not self.online:
+            self.make_perturbed_poca(pp_chunk_size=50000)
+            self.make_inferred_off_mfld_eg(pp_chunk_size=50000)
+
+            num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+            self.all_points[self.S1.genattrs.num_neg:self.S1.genattrs.N, :self.k] = self.on_mfld_pts_k_[:num_on_mfld_S1]
+            self.all_points[self.S1.genattrs.N+self.S2.genattrs.num_neg:, :self.k] = self.on_mfld_pts_k_[num_on_mfld_S1:]
+
+            self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+            self.class_labels[self.S1.genattrs.N+self.S2.genattrs.num_neg:] = 1
+
+            assert (self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N] == 0).all()
+            assert (self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:] == 0).all()
+            assert (self.class_labels[:self.S1.genattrs.num_neg] == 2).all()
+            assert (self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] == 2).all()
+
+            if self.distances is None:
+                self.all_distances = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N)
+                self.all_distances[:] = self.all_actual_distances[:]
+                self.all_distances[self.all_distances >= self.D] = self.D
+
+            self.all_points += self.translation
+            self.all_points = np.dot(self.rotation, self.all_points)
+
+        else:
+            # TODO: implement online sampling of off-manifold points from induced manifold
 
     def compute_points(self):
 
@@ -334,46 +598,50 @@ class ConcentricSpheres(Dataset):
         assert (self._x_cn == self.S2.specattrs.x_cn).all() == True
         logger.info("[ConcentricSpheres]: Generated S2")
 
-        self.all_points = np.zeros((self.N, self.n))
-        self.all_points[:self.S1.genattrs.n] = self.S1.genattrs.points_n.numpy()
-        self.all_points[self.S1.genattrs.n:] = self.S2.genattrs.points_n.numpy()
-        
-        self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
-        self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
-        self.all_distances[:self.S1.genattrs.N, 1] = self._D
-        self.all_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.distances.reshape(-1)
-        self.all_distances[self.S1.genattrs.N:, 0] = self._D
+        if not self.inferred:
+            self.all_points = np.zeros((self.N, self.n))
+            self.all_points[:self.S1.genattrs.n] = self.S1.genattrs.points_n.numpy()
+            self.all_points[self.S1.genattrs.n:] = self.S2.genattrs.points_n.numpy()
+            
+            self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+            self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
+            self.all_distances[:self.S1.genattrs.N, 1] = self._D
+            self.all_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.distances.reshape(-1)
+            self.all_distances[self.S1.genattrs.N:, 0] = self._D
 
-        # giving class labels
-        # 2: no manifold; 0: S_1; 1: S_2
-        self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
-        self.class_labels[:self.S1.genattrs.num_neg] = 2
-        self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
-        self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
-        self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+            # giving class labels
+            # 2: no manifold; 0: S_1; 1: S_2
+            self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+            self.class_labels[:self.S1.genattrs.num_neg] = 2
+            self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+            self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
+            self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
-        # pre-image class labels
-        # 2: no manifold; 0: S_1; 1: S_2
-        if self.N < 1e+7:
-            self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
-            self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
-            self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
-            self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
-            self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+            # pre-image class labels
+            # 2: no manifold; 0: S_1; 1: S_2
+            if self.N < 1e+7:
+                self.pre_class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+                self.pre_class_labels[:self.S1.genattrs.num_neg] = 0
+                self.pre_class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+                self.pre_class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 1
+                self.pre_class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
-        # true distances of points in S1 to S2 and vice versa are not available and marked `M`
-        self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
-        self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[:self.S1.genattrs.N, 1] = self._M
-        self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[self.S1.genattrs.N:, 0] = self._M
+            # true distances of points in S1 to S2 and vice versa are not available and marked `M`
+            self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+            self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
+            self.all_actual_distances[:self.S1.genattrs.N, 1] = self._M
+            self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
+            self.all_actual_distances[self.S1.genattrs.N:, 0] = self._M
 
-        # smoothed distances of points
-        if self.N < 1e+7:
-            self.all_smooth_distances = np.copy(self.all_actual_distances)
-            within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
-            self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
-            self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
+            # smoothed distances of points
+            if self.N < 1e+7:
+                self.all_smooth_distances = np.copy(self.all_actual_distances)
+                within_buffer_mask = (self.all_actual_distances > self._bp) & (self.all_actual_distances <= self._max_norm)
+                self.all_smooth_distances[within_buffer_mask] = self._bp + ((self._M - self._bp) * ((self.all_smooth_distances[within_buffer_mask] - self._bp) / (self._max_norm - self._bp)))
+                self.all_smooth_distances[self.all_actual_distances > self._max_norm] = self._M  # this is not really needed
+
+        else:
+            self.compute_inferred_points()
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
@@ -1015,6 +1283,14 @@ class ConcentricSpheres(Dataset):
         raise RuntimeError("cannot set `recomp_tn` after instantiation!")
 
     @property
+    def use_new_knn(self):
+        return self._use_new_knn
+
+    @use_new_knn.setter
+    def use_new_knn(self):
+        raise RuntimeError("cannot set `use_new_knn` after instantiation!")
+
+    @property
     def cache_dir(self):
         return self.cache_dir
 
@@ -1034,15 +1310,32 @@ class ConcentricSpheres(Dataset):
     def poca(self, idx=None):
         if idx is None:
             x = np.zeros((self.on_mfld_pts_k_.shape[0], self.n))
-            x[:, :self.k] = self.on_mfld_pts_k_
+            x[:, :self.k] = self.on_mfld_pts_k_[self.poca_idx]
             return x
 
         elif isinstance(idx, Iterable):
             x = np.zeros((len(idx), self.n))
-            x[:, :self.k] = self.on_mfld_pts_k_[idx]
+            x[:, :self.k] = self.on_mfld_pts_k_[self.poca_idx[idx]]
             return x
 
         else:
             x = np.zeros(self.n)
-            x[:self.k] = self.on_mfld_pts_k_[idx]
+            x[:self.k] = self.on_mfld_pts_k_[self.poca_idx[idx]]
             return x
+
+    # @property
+    # def on_mfld_pts_trivial_(self, idx=None):
+    #     if idx is None:
+    #         x = np.zeros((self.on_mfld_pts_k_.shape[0], self.n))
+    #         x[:, :self.k] = self.on_mfld_pts_k_
+    #         return x
+
+    #     elif isinstance(idx, Iterable):
+    #         x = np.zeros((len(idx), self.n))
+    #         x[:, :self.k] = self.on_mfld_pts_k_[idx]
+    #         return x
+
+    #     else:
+    #         x = np.zeros(self.n)
+    #         x[:self.k] = self.on_mfld_pts_k_[idx]
+    #         return x
