@@ -567,6 +567,7 @@ class ConcentricSpheres(Dataset):
 
         else:
             # TODO: implement online sampling of off-manifold points from induced manifold
+            pass
 
     def compute_points(self):
 
