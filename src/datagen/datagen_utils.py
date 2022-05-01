@@ -32,7 +32,7 @@ class FaissKNeighbors:
         if self.y is not None:
             votes = self.y[indices]
             predictions = np.array([np.argmax(np.bincount(x)) for x in votes])
-        return indices, distances
+        return distances, indices
 
 class TensorShardsDataset(Dataset):
     """
@@ -188,3 +188,46 @@ class TensorShardsDataset(Dataset):
         
     def __len__(self):
         return self.cur_len
+
+class TensorFileDataset(Dataset):
+    """
+    Inspired by ImageFolder (https://pytorch.org/vision/main/generated/torchvision.datasets.ImageFolder.html)
+    and how ImageNet is stored by Pytorch to store large tensors in a directory like structure
+    """
+    
+    def __init__(self,
+                 root_dir,
+                 total_len=100000,
+                 per_dir_size=10000):
+        self.root_dir = root_dir
+        self.total_len = total_len
+        self.per_dir_size = per_dir_size
+        
+        self.flist = list()
+        
+        self.make_dataset()
+        
+    
+    def __len__(self):
+        return self.total_len
+        
+    
+    def __getitem__(self, idx):
+        
+        req_fn = self.flist[idx]
+        if not os.path.exists(req_fn):
+            raise RuntimeError("requested file {} does not exist!".format(req_fn))
+            
+        arr = torch.load(req_fn)
+        return arr
+    
+    def make_dataset(self):
+        num_dirs = (self.total_len // self.per_dir_size) + 1
+        for i in range(num_dirs):
+            cur_dir_idx = 0
+            for j in range(self.per_dir_size):
+                fn = str((i * self.per_dir_size) + j) + ".pth"
+                full_path = os.path.join(self.root_dir, str(i), fn)
+                self.flist.append(full_path)
+                
+            

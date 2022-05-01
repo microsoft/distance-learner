@@ -1,5 +1,6 @@
 notebooks/test-3D.html
 notebooks/test-3D-2.html
+tmp/
 notebooks_mutate/
 src/dump_*
 datasets/
@@ -10,3 +11,4 @@ lightning_logs/
 tune_dist_learn_resnet18*
 notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints
+tmp/
