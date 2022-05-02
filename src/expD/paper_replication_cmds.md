@@ -4,13 +4,13 @@ First run the Distance Learner for the dataset that is similar to the one given 
 
 
 ```bash
-python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=conc-spheres \
- data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn40 \
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=conc-spheres \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv5_bs4096_highmn40 \
  data.data_params.train.k=50 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
- data.data_params.train.N=6500000 \
- data.data_params.train.num_neg=6000000 \
+ data.data_params.train.N=20500000 \
+ data.data_params.train.num_neg=20000000 \
  data.data_params.train.g=0.3 \
  data.data_params.train.max_norm=0.14 \
  data.data_params.train.bp=0.09 \
