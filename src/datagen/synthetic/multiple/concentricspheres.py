@@ -1,6 +1,7 @@
 import multiprocessing
 import os
 import re
+import shutil
 import sys
 import json
 import copy
@@ -135,7 +136,9 @@ class ConcentricSpheres(Dataset):
 
         self._N = N
         self._num_neg = num_neg
-        self._num_pos = None if num_neg is None else N - num_neg
+        if num_neg is None:
+            self._num_neg = N // 2
+        self._num_pos = None if self._num_neg is None else self._N - self._num_neg
         self._n = n
         self._k = k
         self._D = D
@@ -170,9 +173,10 @@ class ConcentricSpheres(Dataset):
         self._fix_center = None
         self._anchor = anchor
 
-        self._cache_dir = cache_dir
+        
         self._uuid = str(uuid.uuid4())
-        os.makedirs(os.path.join(self.cache_dir, self.uuid), exist_ok=True)
+        self._cache_dir = os.path.join(cache_dir, self._uuid)
+        os.makedirs(self._cache_dir, exist_ok=True)
 
         self.S1 = None
         self.S2 = None
@@ -230,10 +234,10 @@ class ConcentricSpheres(Dataset):
 
         if not self.online:
 
-            self.tang_dir = os.path.join(self.cache_dir, self.uuid, "tangents_at_poca") # cache directory to dump tangents and normals
-            self.norm_dir = os.path.join(self.cache_dir, self.uuid, "normals_at_poca") # cache directory to dump tangents and normals
+            self.tang_dir = os.path.join(self.cache_dir, "tangents_at_poca") # cache directory to dump tangents and normals
+            self.norm_dir = os.path.join(self.cache_dir, "normals_at_poca") # cache directory to dump tangents and normals
 
-            self.new_poca_dir = os.path.join(self.cache_dir, self.uuid, "new_poca") # cache directory to store new poca
+            self.new_poca_dir = os.path.join(self.cache_dir, "new_poca") # cache directory to store new poca
 
             self.tang_dset = TensorFileDataset(
                 root_dir=self.tang_dir,
@@ -297,7 +301,9 @@ class ConcentricSpheres(Dataset):
     def _inf_setup(self):
         """setting up data for off manifold samples when computing inferred manifold"""
         self._make_poca_idx()
+        logger.info("[ConcentricSpheres]: made poca_idx")
         self._collect_on_mfld_k()
+        logger.info("[ConcentricSpheres]: collect on-mfld k-dim points from both spheres")
         self._x_cn = np.zeros(self.n)
         self._x_cn[:self.k] = self.S1.specattrs.x_ck
         
@@ -308,20 +314,34 @@ class ConcentricSpheres(Dataset):
             if `use_new == True`, then use `self.new_knn` for computation
             that is trained on `self.new_poca`
         """
+        logger.info("[ConcentricSpheres]: use_new == {}".format(use_new))
         if not use_new:
+            
             if self.knn is None:
                 self.knn = FaissKNeighbors(k=self.nn + self.buf_nn)
                 to_fit = self.on_mfld_pts_trivial_
                 if self.on_mfld_pts_trivial_ is None:
                     to_fit = np.zeros((self.N, self.n))
                     to_fit[:, self.k] = self.on_mfld_pts_k_
+                logger.info("[ConcentricSpheres]: fitting knn...")
                 self.knn.fit(to_fit)
+                logger.info("[ConcentricSpheres]: knn fit done")
+
+            logger.info("[ConcentricSpheres]: predicting nbhrs...")
             distances, indices = self.knn.predict(X)
+            logger.info("[ConcentricSpheres]: prediction complete...")
+
         else:
             if self.new_knn is None:
+                logger.info("[ConcentricSpheres]: new_knn is None. fitting now...")
                 self.new_knn = FaissKNeighbors(k=self.nn + self.buf_nn)
+                logger.info("[ConcentricSpheres]: fitting new_knn...")
                 self.new_knn.fit(self.new_poca_dset[:])
+                logger.info("[ConcentricSpheres]: new_knn fit done")
+
+            logger.info("[ConcentricSpheres]: predicting nbhrs...")
             distances, indices = self.new_knn.predict(X)
+            logger.info("[ConcentricSpheres]: prediction complete...")
 
         return distances, indices
 
@@ -376,6 +396,7 @@ class ConcentricSpheres(Dataset):
             if self.on_mfld_pts_trivial_ is None:
                 X = np.zeros((self.N, self.n))
                 X[:, self.k] = self.on_mfld_pts_k_
+            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
             self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
         
         global n, k, on_mfld_pts_k_, on_mfld_pts_trivial_, nn_indices, nn_distances
@@ -386,6 +407,17 @@ class ConcentricSpheres(Dataset):
         if nn_indices is None: nn_indices = self.nn_indices
         if nn_distances is None: nn_distances = self.nn_distances
 
+        if os.path.exists(self.tang_dir):
+            logger.info("[ConcentricSpheres]: tang_dir already exists. removing and recreating...")
+            shutil.rmtree(self.tang_dir)
+            os.makedirs(self.tang_dir)
+            logger.info("[ConcentricSpheres]: tang_dir recreated at: {}".format(self.tang_dir))
+        if os.path.exists(self.norm_dir):
+            logger.info("[ConcentricSpheres]: norm_dir already exists. removing and recreating...")
+            shutil.rmtree(self.norm_dir)
+            os.makedirs(self.norm_dir)
+            logger.info("[ConcentricSpheres]: norm_dir recreated at: {}".format(self.norm_dir))
+
         cur_tang_dir_idx = 0
         cur_tang_dir_name = os.path.join(self.tang_dir, str(cur_tang_dir_idx))
         os.makedirs(cur_tang_dir_name, exist_ok=True)
@@ -393,7 +425,7 @@ class ConcentricSpheres(Dataset):
         cur_norm_dir_name = os.path.join(self.norm_dir, str(cur_norm_dir_idx))
         os.makedirs(cur_norm_dir_name, exist_ok=True)
 
-        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size)):
+        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing T&N"):
             with multiprocessing.Pool(processes=24) as pool:
                 results = pool.map(_get_tn_for_on_mfld_idx, range(i, int(min(i + pp_chunk_size, self.num_pos))))
 
@@ -511,6 +543,7 @@ class ConcentricSpheres(Dataset):
             if Y is None:
                 Y = np.zeros((self.N, self.n))
                 Y[:, self.k] = self.on_mfld_pts_k_
+            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
             self.nn_distances, self.nn_indices = self.find_knn(Y)
 
         global N, n, k, num_pos, num_neg, nn_distances, nn_indices, poca, poca_idx, tang_dset, norm_dset, max_t_delta
@@ -526,9 +559,14 @@ class ConcentricSpheres(Dataset):
         if tang_dset is None: tang_dset = self.tang_dset
         if norm_dset is None: norm_dset = self.norm_dset
         if max_t_delta is None: max_t_delta = self.max_t_delta
-       
 
-        for i in tqdm(range(0, self.num_neg, pp_chunk_size)):
+        if os.path.exists(self.new_poca_dir):
+            logger.info("[ConcentricSpheres]: new_poca_dir already exists. removing and recreating...")
+            shutil.rmtree(self.new_poca_dir)
+            os.makedirs(self.new_poca_dir)
+            logger.info("[ConcentricSpheres]: recreated new_poca_dir at: {}".format(self.new_poca_dir))
+
+        for i in tqdm(range(0, self.num_neg, pp_chunk_size), desc="computing perturbed poca"):
             with multiprocessing.Pool(processes=24) as pool:
                 results = pool.map(_make_perturbed_poca_for_idx, range(i, min(i + pp_chunk_size, self.num_neg)))
 
@@ -536,7 +574,6 @@ class ConcentricSpheres(Dataset):
             cur_new_poca_dir_name = os.path.join(self.new_poca_dir, str(cur_new_poca_dir_idx))
             os.makedirs(cur_new_poca_dir_name, exist_ok=True)
 
-            flush_it=False
             end_j = min(i + pp_chunk_size, self.num_neg)
             for j in range(i, end_j):
                 # self.new_poca[i] = results[i][1]
@@ -586,82 +623,6 @@ class ConcentricSpheres(Dataset):
         tang_dset = None
         max_t_delta = None
 
-    # def _make_off_mfld_eg_for_idx(self, idx, return_all=False):
-        
-    #     on_mfld_pt = self.new_poca_dset[idx]
-
-    #     tangential_dirs = None
-    #     normal_dirs = None
-
-    #     if self.recomp_tn:
-
-    #         new_nbhr_indices = None
-    #         new_nbhr_dists = None
-
-    #         if self.new_nn_distances is None or self.new_nn_indices is None:
-    #             if self.use_new_knn:
-    #                 self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:], use_new=True)
-    #             else:
-    #                 self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:], use_new=False)
-
-    #         if self.new_nn_indices is None or self.new_nn_distances is None:
-    #             new_nbhr_dists, new_nbhr_indices = self.knn.predict(self.poca[idx].reshape(-1, 1))
-    #             new_nbhr_dists = new_nbhr_dists[0]
-    #             new_nbhr_indices = new_nbhr_indices[0]
-    #         else:
-    #             # since nn_indices and nn_dists are computed over on_mfld_pts_trivial_
-    #             # therefore we search for indices and dists using poca_idx[idx]
-    #             tmp = idx if self.use_new_knn else self.poca_idx[idx]
-    #             new_nbhr_indices = self.new_nn_indices[tmp]
-    #             new_nbhr_dists = self.new_nn_distances[tmp]
-
-    #         if idx < self.num_pos and self.poca_idx[idx] in new_nbhr_indices:
-    #             new_nbhr_indices = new_nbhr_indices[new_nbhr_indices != self.poca_idx[idx]]
-    #         else:
-    #             new_nbhr_indices = new_nbhr_indices[:-1]
-
-    #         new_nbhrs = np.zeros((self.nn + self.buf_nn, self.n))
-
-    #         if self.use_new_knn:
-    #             for nbhr_idx in new_nbhr_indices:
-    #                 new_nbhrs[nbhr_idx] = self.new_poca_dset[nbhr_idx]
-    #         else:
-    #             new_nbhrs[:, :self.k] = self.on_mfld_pts_k_[new_nbhr_indices]
-
-    #         new_nbhr_local_coords = new_nbhrs - on_mfld_pt
-
-    #         pca = PCA(n_components=self.k - 1)
-    #         pca.fit(new_nbhr_local_coords)
-
-    #         tangential_dirs = pca.components_
-    #         normal_dirs = spla.null_space(tangential_dirs).T
-
-    #         tangential_dirs += on_mfld_pt
-    #         normal_dirs += on_mfld_pt
-
-    #     else:
-
-    #         tangential_dirs = self.tang_dset[self.poca_idx[idx]]
-    #         normal_dirs = self.norm_dset[self.poca_idx[idx]]
-
-
-    #     rdm_coeffs = np.random.normal(0, 1, size=normal_dirs.shape[0])
-    #     off_mfld_pt = np.sum(rdm_coeffs.reshape(-1, 1) * normal_dirs, axis=0)
-    #     rdm_norm = np.random.uniform(0, self.max_norm)
-    #     off_mfld_pt = off_mfld_pt * (rdm_norm / np.linalg.norm(off_mfld_pt))
-    #     off_mfld_pt += on_mfld_pt
-
-
-    #     if return_all:
-    #         return (
-    #             idx, 
-    #             off_mfld_pt,
-    #             rdm_norm,
-    #             tangential_dirs,
-    #             normal_dirs
-    #         )
-    #     return (idx, off_mfld_pt, rdm_norm)
-
     def make_inferred_off_mfld_eg(self, pp_chunk_size=50000):
         """
         :param pp_chunk_size: chunk size for parallel processing
@@ -689,7 +650,7 @@ class ConcentricSpheres(Dataset):
 
         s1_off_mfld_idx = 0
         s2_off_mfld_idx = self.S1.genattrs.N
-        for i in tqdm(range(0, self.num_neg, pp_chunk_size)):
+        for i in tqdm(range(0, self.num_neg, pp_chunk_size), desc="computing off mfld"):
 
             with multiprocessing.Pool(processes=24) as pool:
                 results = pool.map(_make_off_mfld_eg_for_idx, range(i, min(i + pp_chunk_size, self.num_neg)))
@@ -709,7 +670,7 @@ class ConcentricSpheres(Dataset):
                 else:
                     row = s1_off_mfld_idx
                     s1_off_mfld_idx += 1
-                print(j, tmp, j_to_poca_idx, row, col)
+                # print(j, tmp, j_to_poca_idx, row, col)
                 self.all_points[row] = results[j - i][1]
                     
                 if self.all_actual_distances is None:
@@ -734,10 +695,16 @@ class ConcentricSpheres(Dataset):
     def compute_inferred_points(self):
 
         self._inf_setup()
+        logger.info("initial setup complete")
+        # print("after setup", self.nn_indices)
         self.get_tn_for_on_mfld_pts(pp_chunk_size=50000)
+
+        # print("after tn", self.nn_indices)
         if not self.online:
             self.make_perturbed_poca(pp_chunk_size=50000)
+            # print("after perturbation", self.nn_indices)
             self.make_inferred_off_mfld_eg(pp_chunk_size=50000)
+            # print("off mfld eg", self.nn_indices)
 
             num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
             self.all_points[self.S1.genattrs.num_neg:self.S1.genattrs.N, :self.k] = self.on_mfld_pts_k_[:num_on_mfld_S1]
@@ -811,8 +778,8 @@ class ConcentricSpheres(Dataset):
 
         if not self.inferred:
             self.all_points = np.zeros((self.N, self.n))
-            self.all_points[:self.S1.genattrs.n] = self.S1.genattrs.points_n.numpy()
-            self.all_points[self.S1.genattrs.n:] = self.S2.genattrs.points_n.numpy()
+            self.all_points[:self.S1.genattrs.N] = self.S1.genattrs.points_n.numpy()
+            self.all_points[self.S1.genattrs.N:] = self.S2.genattrs.points_n.numpy()
             
             self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
             self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
@@ -1070,7 +1037,7 @@ class ConcentricSpheres(Dataset):
 
         attr_set = vars(self)
         for attr in attr_set:
-            if attr in ["S1", "S2"]:
+            if attr in ["S1", "S2"] or "dset" in attr:
                 continue
             if attr in attrs:
                 if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
@@ -1080,6 +1047,25 @@ class ConcentricSpheres(Dataset):
                 else:
                     setattr(self, attr, attrs[attr])
 
+
+        self.tang_dset = TensorFileDataset(
+            root_dir = self.tang_dir,
+            total_len = self.num_pos,
+            per_dir_size = 50000
+        )
+
+        self.norm_dset = TensorFileDataset(
+            root_dir = self.norm_dir,
+            total_len = self.num_pos,
+            per_dir_size = 50000
+        )
+
+        self.new_poca_dset = TensorFileDataset(
+            root_dir = self.new_poca_dir,
+            total_len = self.num_neg,
+            per_dir_size = 50000
+        )
+
         if os.path.exists(S1_dump):
             self.S1 = RandomSphere()
             self.S1.load_data(S1_dump)
@@ -1088,12 +1074,26 @@ class ConcentricSpheres(Dataset):
             self.S2 = RandomSphere()
             self.S2.load_data((S2_dump))
 
+    def _get_save_cache_path(self, save_dir):
+        cache_dump = os.path.join(save_dir, "cache")
+        return cache_dump
+        
 
     def save_data(self, save_dir):
 
         os.makedirs(save_dir, exist_ok=True)
         S1_dir = None
         S2_dir = None
+        
+        cache_dump_path = self._get_save_cache_path(save_dir)
+        if os.path.exists(cache_dump_path):
+            shutil.rmtree(cache_dump_path)
+        os.rename(self.cache_dir, cache_dump_path)
+        self._cache_dir = cache_dump_path
+        self.tang_dir = os.path.join(self.cache_dir, "tangents_at_poca")
+        self.norm_dir = os.path.join(self.cache_dir, "normals_at_poca")
+        self.new_poca_dir = os.path.join(self.cache_dir, "new_poca")
+
         if self.N < 1e+7:
             S1_dir = os.path.join(save_dir, "S1_dump")
             S2_dir = os.path.join(save_dir, "S2_dump")
@@ -1106,9 +1106,13 @@ class ConcentricSpheres(Dataset):
 
         attr_set = vars(self)
         for attr in attr_set:
-            if attr in ["S1", "S2"]:
+            if attr in ["S1", "S2"] or "dset" in attr or "knn" in attr:
+                # S1 and S2 saved separately so need not be handled. dsets like
+                # tang_dset and norm_dset can be constructed at loading. need not be
+                # dumped
                 continue
-            if not isinstance(attr_set[attr], Iterable):
+            if (type(attr_set[attr]) == str) or not isinstance(attr_set[attr], Iterable):
+                # print(attr, attr_set[attr])
                 specs_attrs[attr] = attr_set[attr]                
             else:
                 attr_fn = os.path.join(save_dir, attr + ".pkl")
@@ -1118,7 +1122,6 @@ class ConcentricSpheres(Dataset):
 
         with open(specs_fn, "w+") as f:
             json.dump(specs_attrs, f)
-
 
         torch.save(data_attrs, data_fn)
         
@@ -1143,8 +1146,9 @@ class ConcentricSpheres(Dataset):
             "mu": 0,
             "sigma": 1,
             "seed": 42,
-            "gamma": 0.5,
-            "norm_factor": 1.0
+            "gamma": 0,
+            "norm_factor": 1.0,
+            "cache_dir": "/data/data_cache"
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)
@@ -1230,6 +1234,7 @@ class ConcentricSpheres(Dataset):
         try:
             train_set.load_data(train_dir)
         except:
+            logger.info("[ConcentricSpheres]: could not load train split!")
             train_set = None
 
         val_dir = os.path.join(dump_dir, "val")
