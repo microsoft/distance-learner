@@ -172,6 +172,10 @@ class ConcentricSpheres(Dataset):
 
         ### only relevant when `self.inferred == True`###
 
+        self.all_points_trivial_ = None
+        self.all_points_tr_ = None
+        self.all_points_rot_ = None
+
         self._nn = nn # neighborhood size for kNN
         if self._nn is None:
             self._nn = k - 1
@@ -724,8 +728,7 @@ class ConcentricSpheres(Dataset):
             assert (self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] == 2).all()
 
             if self.all_distances is None:
-                self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
-                self.all_distances[:] = self.all_actual_distances[:]
+                self.all_distances = self.all_actual_distances.copy()
                 self.all_distances[self.all_distances >= self.D] = self.D
 
             self.all_points_trivial_ = None
@@ -740,13 +743,19 @@ class ConcentricSpheres(Dataset):
                 self.all_points += self.translation
                 self.all_points = np.dot(self.rotation, self.all_points.T).T
                 
-
+            
             self._x_cn += self.translation
             self._x_cn = np.dot(self.rotation, self.x_cn)
 
         else:
             # TODO: implement online sampling of off-manifold points from induced manifold
             pass
+
+        # self.all_distances = torch.from_numpy(self.all_distances).float()
+        self.all_points_trivial_ = torch.from_numpy(self.all_points_trivial_).float()
+        self.all_points_tr_ = torch.from_numpy(self.all_points_tr_).float()
+        self.all_points_rot_ = torch.from_numpy(self.all_points_rot_).float()
+        self._x_cn = torch.from_numpy(self._x_cn).float()
 
     def compute_points(self):
 
@@ -1111,6 +1120,7 @@ class ConcentricSpheres(Dataset):
 
         attr_set = vars(self)
         for attr in attr_set:
+            print("dumping this:", attr)
             if attr in ["S1", "S2"] or "dset" in attr or "knn" in attr:
                 # S1 and S2 saved separately so need not be handled. dsets like
                 # tang_dset and norm_dset can be constructed at loading. need not be
@@ -1595,15 +1605,15 @@ def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k,\
     
     # nbhr_local_coords = nbhrs - on_mfld_pt
     # # print(nbhr_indices)
-
+    
     pca = PCA(n_components=k-1) # manifold is (k-1) dim so tangent space should be same
     pca.fit(nbhr_local_coords)
 
     tangential_dirs = pca.components_
     normal_dirs = spla.null_space(tangential_dirs).T
 
-    # tangential_dirs += on_mfld_pt
-    # normal_dirs += on_mfld_pt
+    # tangential_dirs = np.ones((k - 1, 500))
+    # normal_dirs = np.ones((500 - k + 1, 500))
 
     cur_tang_dir_idx = idx // tang_dset_per_dir_size
     cur_tang_dir_name = os.path.join(tang_dir, str(cur_tang_dir_idx))
@@ -1622,44 +1632,12 @@ def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k,\
 
 
 
-def _make_perturbed_poca_for_idx(idx, poca, poca_idx, max_t_delta, tang_dset, norm_dset, new_poca_dset_per_dir_size, new_poca_dir, return_all=False):
+def _make_perturbed_poca_for_idx(idx, poca, poca_idx, max_t_delta,\
+     tang_dset, norm_dset, new_poca_dset_per_dir_size, new_poca_dir,\
+     return_all=False):
 
     on_mfld_pt = poca
 
-    # nbhr_indices = None
-    # nbhr_dists = None
-    # if nn_indices is None or nn_distances is None:
-    #     nbhr_dists, nbhr_indices = knn.predict(poca[idx].reshape(-1, 1))
-    #     nbhr_dists = nbhr_dists[0]
-    #     nbhr_indices = nbhr_indices[0]
-    # else:
-    #     # since .nn_indices and .nn_dists are computed over on_mfld_pts_trivial_
-    #     # therefore we search for indices and dists using poca_idx[idx]
-    #     nbhr_indices = nn_indices[poca_idx[idx]]
-    #     nbhr_dists = nn_distances[poca_idx[idx]]
-
-    # if poca_idx[idx] in nbhr_indices:
-    #     nbhr_indices = nbhr_indices[nbhr_indices != poca_idx[idx]]
-    # else:
-    #     nbhr_indices = nbhr_indices[:-1]
-
-    
-    # nbhrs = np.zeros((nbhr_indices.shape[0], n))
-    # nbhrs[:, k] = on_mfld_pts_k[nbhr_indices]
-    # nbhr_local_coords = nbhrs - on_mfld_pt
-    
-
-    # pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
-    # pca.fit(nbhr_local_coords)
-
-    # tangential_dirs = pca.components_
-    # normal_dirs = spla.null_space(tangential_dirs).T
-
-    # tangential_dirs += on_mfld_pt
-    # normal_dirs += on_mfld_pt
-
-    # tangential_dirs = tang_dset[poca_idx[idx]]
-    # normal_dirs = norm_dset[poca_idx[idx]]
     tangential_dirs = tang_dset[poca_idx]
     normal_dirs = norm_dset[poca_idx]
     
@@ -1670,6 +1648,11 @@ def _make_perturbed_poca_for_idx(idx, poca, poca_idx, max_t_delta, tang_dset, no
     delta = (prturb_size / np.linalg.norm(delta, ord=2)) * delta
 
     prturb_poca = on_mfld_pt + delta
+
+    # prturb_poca = np.ones(500)
+    # prturb_size = 1
+    # tangential_dirs = None
+    # normal_dirs = None
 
     cur_new_poca_dir_idx = idx // new_poca_dset_per_dir_size
     cur_new_poca_dir_name = os.path.join(new_poca_dir, str(cur_new_poca_dir_idx))
@@ -1693,7 +1676,7 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
         
     on_mfld_pt = new_poca_dset[idx]
 
-    tangential_dirs = None
+    # tangential_dirs = None
     normal_dirs = None
 
     if recomp_tn:
@@ -1705,7 +1688,6 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
         not enter here
 
         """
-
 
         # since nn_indices and nn_dists are computed over on_mfld_pts_trivial_
         # therefore we search for indices and dists using poca_idx[idx]
@@ -1725,13 +1707,13 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
         # else:
         #     new_nbhrs[:, :k] = on_mfld_pts_k_[new_nbhr_indices]
 
-        new_nbhr_local_coords = new_nbhrs - on_mfld_pt
+        # new_nbhr_local_coords = new_nbhrs - on_mfld_pt
 
-        pca = PCA(n_components=k - 1)
-        pca.fit(new_nbhr_local_coords)
+        # pca = PCA(n_components=k - 1)
+        # pca.fit(new_nbhr_local_coords)
 
-        tangential_dirs = pca.components_
-        normal_dirs = spla.null_space(tangential_dirs).T
+        # tangential_dirs = pca.components_
+        # normal_dirs = spla.null_space(tangential_dirs).T
 
         # tangential_dirs += on_mfld_pt
         # normal_dirs += on_mfld_pt
@@ -1740,8 +1722,9 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
 
         # tangential_dirs = tang_dset[poca_idx[idx]]
         # normal_dirs = norm_dset[poca_idx[idx]]
+        
         normal_dirs = norm_dset[poca_idx]
-
+        # normal_dirs = None
 
     rdm_coeffs = np.random.normal(0, 1, size=normal_dirs.shape[0])
     off_mfld_pt = np.sum(rdm_coeffs.reshape(-1, 1) * normal_dirs, axis=0)
@@ -1749,13 +1732,15 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
     off_mfld_pt = off_mfld_pt * (rdm_norm / np.linalg.norm(off_mfld_pt))
     off_mfld_pt += on_mfld_pt
 
+    # off_mfld_pt = np.ones(2)
+    # rdm_norm = 1
+
 
     if return_all:
         return (
             idx, 
             off_mfld_pt,
             rdm_norm,
-            tangential_dirs,
             normal_dirs
         )
     return (idx, off_mfld_pt, rdm_norm)
