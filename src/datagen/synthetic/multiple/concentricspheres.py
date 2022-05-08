@@ -394,7 +394,7 @@ class ConcentricSpheres(Dataset):
             actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
 
             on_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.k - 1))
-            print(on_mfld_pb_coeffs.shape, all_tang_and_norms.shape)
+            # print(on_mfld_pb_coeffs.shape, all_tang_and_norms.shape)
             on_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
             on_mfld_pb_sizes = np.random.uniform(0, self.max_t_delta, size=(actual_chunk_size, num_offmfld_per_idx))
             
@@ -1181,7 +1181,7 @@ class ConcentricSpheres(Dataset):
 
         attr_set = vars(self)
         for attr in attr_set:
-            print("dumping this:", attr)
+            # print("dumping this:", attr)
             if attr in ["S1", "S2"] or "dset" in attr or "knn" in attr:
                 # S1 and S2 saved separately so need not be handled. dsets like
                 # tang_dset and norm_dset can be constructed at loading. need not be
