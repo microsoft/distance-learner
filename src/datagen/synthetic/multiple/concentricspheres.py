@@ -1638,12 +1638,14 @@ class ConcentricSpheres(Dataset):
 def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k, \
      tang_dset_per_dir_size=None, norm_dset_per_dir_size=None, tang_dir=None, norm_dir=None, return_dirs=True):
     """compute tangential and normal directions for all on-manifold points"""
-    
+    # print("nbhr_local_coords", nbhr_local_coords.shape)
     pca = PCA(n_components=k-1) # manifold is (k-1) dim so tangent space should be same
     pca.fit(nbhr_local_coords)
 
     tangential_dirs = pca.components_
     normal_dirs = spla.null_space(tangential_dirs).T
+    # print("tangent", tangential_dirs.shape)
+    # print("normal", normal_dirs.shape)
 
     # tangential_dirs = np.ones((k - 1, 500))
     # normal_dirs = np.ones((500 - k + 1, 500))
@@ -1662,7 +1664,10 @@ def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k, \
         norm_fn = os.path.join(cur_norm_dir_name, str(idx) + ".pth")
         torch.save(normal_dirs, norm_fn)
     # print(idx, tang_dset_per_dir_size, norm_dset_per_dir_size, cur_tang_dir_idx)
-    if return_dirs: return np.array((tangential_dirs, normal_dirs)).reshape(-1, tangential_dirs.shape[1])
+    t_and_n = np.zeros((tangential_dirs.shape[1], tangential_dirs.shape[1]))
+    t_and_n[:k-1] = tangential_dirs
+    t_and_n[k-1:] = normal_dirs
+    if return_dirs: return t_and_n
     # return (idx, tangential_dirs, normal_dirs)
 
 
