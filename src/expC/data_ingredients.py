@@ -35,8 +35,11 @@ data_ingredient = Ingredient('data')
 def data_cfg():
     mtype = "ittw-swissrolls" # manifold type
     generate = False # generate fresh dataset
-    backup_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_concspheres_test/" 
-    logdir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/" # high-level dump folder
+    # backup_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_concspheres_test/" 
+    # logdir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/" # high-level dump folder
+    backup_dir = "/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex"
+    # logdir = "/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
+    logdir = "/data/t-achetan_2/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
     data_tag = "rdm_swiss_rolls_k2n2" # low-level data directory name
     data_dir = os.path.join(logdir, data_tag, "data") # complete data directory path
     data_params = DATA_CONFIGS[mtype]()

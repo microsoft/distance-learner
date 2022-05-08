@@ -148,7 +148,7 @@ class ConcentricSpheres(Dataset):
         
         self._uuid = str(uuid.uuid4())
         self._cache_dir = os.path.join(cache_dir, self._uuid)
-        os.makedirs(self._cache_dir, exist_ok=True)
+        
 
         self.S1 = None
         self.S2 = None
@@ -172,6 +172,8 @@ class ConcentricSpheres(Dataset):
 
         ### only relevant when `self.inferred == True`###
 
+        self.avoid_io = True # generate points without writing intermediate steps to disk
+
         self.all_points_trivial_ = None
         self.all_points_tr_ = None
         self.all_points_rot_ = None
@@ -192,6 +194,7 @@ class ConcentricSpheres(Dataset):
         self._max_t_delta = max_t_delta # maximum tangential perturbation allowed
 
         self.poca_idx = None # indices of points of closes approach in on-manifold points
+        self.poca_idx_counts = None # number of times the ith on-manifold point was used to make off-manifold points
         self.new_poca = None # points of closest approach after applying tangential perturbations
         self.new_poca_prturb_sizes = None # perturbation size of tangential perturbation
 
@@ -208,7 +211,10 @@ class ConcentricSpheres(Dataset):
         self.norm_dset = None
         self.new_poca_dset = None
 
-        if not self.online:
+        if not self.avoid_io:
+            os.makedirs(self._cache_dir, exist_ok=True)
+
+        if not self.online and not self.avoid_io:
 
             self.tang_dir = os.path.join(self.cache_dir, "tangents_at_poca") # cache directory to dump tangents and normals
             self.norm_dir = os.path.join(self.cache_dir, "normals_at_poca") # cache directory to dump tangents and normals
@@ -232,11 +238,22 @@ class ConcentricSpheres(Dataset):
                 total_len=self.num_neg,
                 per_dir_size=50000
             )
-            
+
+        # for debugging
+        self.all_tang_and_norms = None
+        self.on_mfld_pb = None
+        self.off_mfld_pb = None
+        self.off_mfld_pts_for_chunk = None
+        self.on_mfld_pb_sizes = None
+        self.off_mfld_pb_sizes = None
+
     def _make_poca_idx(self):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
         self.poca_idx[:self.num_neg // 2] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, dtype=np.int64), size=self.S1.genattrs.num_neg, replace=True).astype(np.int64)
         self.poca_idx[self.num_neg // 2:] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, self.num_pos, dtype=np.int64), size=self.S2.genattrs.num_neg, replace=True).astype(np.int64)
+        self.poca_idx_counts = np.zeros(self.num_pos).astype(np.int64)
+        tmp = np.unique(self.poca_idx, return_counts=True)
+        self.poca_idx_counts[tmp[0]] = tmp[1]
         # self.poca_idx =  np.zeros(self.num_neg, dtype=np.int64)
         # tmp = min((self.N // 2) - (self.num_neg // 2), self.num_neg // 2)
         # num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
@@ -301,7 +318,149 @@ class ConcentricSpheres(Dataset):
 
         return distances, indices
 
-    
+    def make_inferred_off_mfld2(self, pp_chunk_size=50000):
+        """
+        roll in T&N construction, on mfld perturbation, and off mfld 
+        perturbation all into one. avoid I/O
+
+        :param pp_chunk_size: chunk size for parallel processing
+        """
+        if self.nn_distances is None or self.nn_indices is None:
+            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
+            X = None
+            if self.on_mfld_pts_trivial_ is None:
+                X = np.zeros((self.N, self.n))
+                X[:, self.k] = self.on_mfld_pts_k_
+                self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
+            else:
+                self.nn_distances, self.nn_indices = self.find_knn(self.on_mfld_pts_trivial_, use_new=False)
+        
+        
+
+        if self.class_labels is None:
+            self.class_labels = np.zeros(self.N).astype(np.int64)
+        if self.all_actual_distances is None:
+            self.all_actual_distances = np.zeros((self.N, 2))
+        if self.all_points is None:
+            self.all_points = np.zeros((self.N, self.n))
+        
+        num_offmfld_per_idx = max(self.poca_idx_counts)
+        total_num_neg_made = 0
+        # print(num_offmfld_per_idx)
+
+        S1_off_mfld_idx = 0
+        S2_off_mfld_idx = self.S1.genattrs.N
+
+        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing off mfld (2)"):
+
+            nbhr_indices = self.nn_indices[i:min(self.num_pos, i+pp_chunk_size)]
+            mask = np.equal(nbhr_indices, np.arange(i, min(self.num_pos, i+pp_chunk_size)).reshape(-1, 1))
+            mask[mask.sum(axis=1) == 0, -1] = True
+            nbhr_indices = nbhr_indices[~mask].reshape(nbhr_indices.shape[0], nbhr_indices.shape[1] - 1).astype(np.int64)
+
+            on_mfld_pts = None
+            nbhrs = None
+            if self.on_mfld_pts_trivial_ is None:
+                on_mfld_pts = np.zeros((pp_chunk_size, self.n))
+                on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
+
+                nbhrs = np.zeros((pp_chunk_size, nbhr_indices.shape[1], self.n))
+                nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices]
+            else:
+                on_mfld_pts = self.on_mfld_pts_trivial_[i:i+pp_chunk_size]
+                nbhrs = self.on_mfld_pts_trivial_[nbhr_indices]
+            # nbhrs - > (50000, 50, 500) on_mfld_pts -> (50000, 500)
+            nbhr_local_coords = (nbhrs.transpose(1, 0, 2) - on_mfld_pts).transpose(1, 0, 2)
+            # print(nbhr_local_coords.shape)
+            #             
+            _get_tn_for_on_mfld_idx_partial = partial(_get_tn_for_on_mfld_idx, \
+                k=self.k,
+                return_dirs=True)
+
+            
+            with multiprocessing.Pool(processes=24) as pool:
+                
+                all_tang_and_norms = pool.starmap(
+                    _get_tn_for_on_mfld_idx_partial, 
+                    zip(
+                        range(i, int(min(i + pp_chunk_size, self.num_pos))),
+                        nbhr_local_coords,
+                        )
+                    )
+            all_tang_and_norms = np.array(all_tang_and_norms)
+            if self.N <= 20000:
+                self.all_tang_and_norms = all_tang_and_norms
+
+            actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
+
+            on_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.k - 1))
+            print(on_mfld_pb_coeffs.shape, all_tang_and_norms.shape)
+            on_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
+            on_mfld_pb_sizes = np.random.uniform(0, self.max_t_delta, size=(actual_chunk_size, num_offmfld_per_idx))
+            
+            # the next line was giving an error in ipython for some reason. will take a closer look later
+            # hint: https://stackoverflow.com/questions/57507832/unable-to-allocate-array-with-shape-and-data-type
+            # on_mfld_pb = np.dot(on_mfld_pb_coeffs, all_tang_and_norms[:, :self.k - 1, :])
+            
+            off_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.n - self.k + 1))
+            off_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
+            off_mfld_pb_sizes = np.random.uniform(0, self.max_norm, size=(actual_chunk_size, num_offmfld_per_idx))
+            
+            if self.N <= 20000:
+                self.on_mfld_pb_sizes = on_mfld_pb_sizes
+                self.off_mfld_pb_sizes = off_mfld_pb_sizes
+
+            # the next line was giving an error in ipython for some reason. will take a closer look later
+            # hint: https://stackoverflow.com/questions/57507832/unable-to-allocate-array-with-shape-and-data-type
+            # off_mfld_pb = np.dot(off_mfld_pb_coeffs, all_tang_and_norms[:, self.k - 1:, :])
+
+            for j in range(actual_chunk_size):
+                on_mfld_pb[j] = np.dot(on_mfld_pb_coeffs[j], all_tang_and_norms[j, :self.k - 1, :])
+                off_mfld_pb[j] = np.dot(off_mfld_pb_coeffs[j], all_tang_and_norms[j, self.k - 1:, :])
+            
+            on_mfld_pb = on_mfld_pb * np.expand_dims(on_mfld_pb_sizes / np.linalg.norm(on_mfld_pb, axis=-1), axis=-1)
+            new_pocas_for_chunk = np.expand_dims(on_mfld_pts, axis=1) + on_mfld_pb
+
+            off_mfld_pb = off_mfld_pb * np.expand_dims(off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=-1), axis=-1)
+            off_mfld_pts_for_chunk = new_pocas_for_chunk + off_mfld_pb
+            
+            if self.N <= 20000:
+                self.on_mfld_pb = torch.from_numpy(on_mfld_pb)
+                self.off_mfld_pb = torch.from_numpy(off_mfld_pb)
+                self.off_mfld_pts_for_chunk = torch.from_numpy(off_mfld_pts_for_chunk)
+
+            indices_to_use = sum([[((j) * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
+            logger.info("indices_to_use: {}".format(indices_to_use[:10]))
+            assert len(indices_to_use) == np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            total_num_neg_made += np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            off_mfld_pts = off_mfld_pts_for_chunk.reshape(-1, self.n)[indices_to_use]
+            off_mfld_dists = off_mfld_pb_sizes.reshape(-1)[indices_to_use]
+
+            pre_image_idx = np.array(sum([[0 if j < self.S1.genattrs.N - self.S1.genattrs.num_neg else 1 for k in range(self.poca_idx_counts[j])] for j in range(i, min(i+pp_chunk_size, self.num_pos))], []))
+            assert len(pre_image_idx) == np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            
+            S1_off_mfld_offset = np.count_nonzero(pre_image_idx == 0)
+            self.all_points[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset] = off_mfld_pts[pre_image_idx == 0] 
+            self.all_actual_distances[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset, 0] = off_mfld_dists[pre_image_idx == 0]
+            self.all_actual_distances[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset, 1] = self.M
+            self.class_labels[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset] = 2
+            S1_off_mfld_idx += S1_off_mfld_offset
+
+            S2_off_mfld_offset = np.count_nonzero(pre_image_idx == 1)
+            self.all_points[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = off_mfld_pts[pre_image_idx == 1] 
+            self.all_actual_distances[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset, 1] = off_mfld_dists[pre_image_idx == 1]
+            self.all_actual_distances[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset, 0] = self.M
+            self.class_labels[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = 2
+            S2_off_mfld_idx += S2_off_mfld_offset
+            
+
+        # for on-manifold points
+        self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 1] = self.M
+        self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 0] = self.M
+        assert S1_off_mfld_idx == self.S1.genattrs.num_neg
+        assert S2_off_mfld_idx - self.S1.genattrs.N == self.S2.genattrs.num_neg
+        assert total_num_neg_made == self.num_neg
+
     def get_tn_for_on_mfld_pts(self, pp_chunk_size=50000):
         """
         make tangents and normals and store them in shard tensors for on-manifold points
@@ -319,18 +478,6 @@ class ConcentricSpheres(Dataset):
             else:
                 self.nn_distances, self.nn_indices = self.find_knn(self.on_mfld_pts_trivial_, use_new=False)
 
-        
-        # global n, k, on_mfld_pts_k_, on_mfld_pts_trivial_, nn_indices, nn_distances, tang_dset_per_dir_size, norm_dset_per_dir_size, tang_dir, norm_dir
-        # if n is None: n = self.n 
-        # if k is None: k = self.k
-        # if on_mfld_pts_k_ is None: on_mfld_pts_k_ = self.on_mfld_pts_k_
-        # if on_mfld_pts_trivial_ is None: on_mfld_pts_trivial_ = self.on_mfld_pts_trivial_
-        # if nn_indices is None: nn_indices = self.nn_indices
-        # if nn_distances is None: nn_distances = self.nn_distances
-        # if tang_dset_per_dir_size is None: tang_dset_per_dir_size = self.tang_dset.per_dir_size
-        # if norm_dset_per_dir_size is None: norm_dset_per_dir_size = self.norm_dset.per_dir_size
-        # if tang_dir is None: tang_dir = self.tang_dir
-        # if norm_dir is None: norm_dir = self.norm_dir
 
         if os.path.exists(self.tang_dir):
             logger.info("[ConcentricSpheres]: tang_dir already exists. removing and recreating...")
@@ -343,12 +490,6 @@ class ConcentricSpheres(Dataset):
             os.makedirs(self.norm_dir)
             logger.info("[ConcentricSpheres]: norm_dir recreated at: {}".format(self.norm_dir))
 
-        # cur_tang_dir_idx = 0
-        # cur_tang_dir_name = os.path.join(self.tang_dir, str(cur_tang_dir_idx))
-        # os.makedirs(cur_tang_dir_name, exist_ok=True)
-        # cur_norm_dir_idx = 0
-        # cur_norm_dir_name = os.path.join(self.norm_dir, str(cur_norm_dir_idx))
-        # os.makedirs(cur_norm_dir_name, exist_ok=True)
 
         for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing T&N"):
 
@@ -423,68 +564,7 @@ class ConcentricSpheres(Dataset):
         # nn_indices = None
         # nn_distances = None
 
-    # def _make_perturbed_poca_for_idx(self, idx, return_all=False):
-
-    #     prturb_size = 0
-
-    #     if idx < self.num_pos:
-    #         # one copy of poca should be unperturbed
-    #         return (idx, self.poca[idx], prturb_size)
-
-    #     on_mfld_pt = self.poca[idx]
-
-    #     nbhr_indices = None
-    #     nbhr_dists = None
-    #     if self.nn_indices is None or self.nn_distances is None:
-    #         nbhr_dists, nbhr_indices = self.knn.predict(self.poca[idx].reshape(-1, 1))
-    #         nbhr_dists = nbhr_dists[0]
-    #         nbhr_indices = nbhr_indices[0]
-    #     else:
-    #         # since .nn_indices and .nn_dists are computed over on_mfld_pts_trivial_
-    #         # therefore we search for indices and dists using poca_idx[idx]
-    #         nbhr_indices = self.nn_indices[self.poca_idx[idx]]
-    #         nbhr_dists = self.nn_distances[self.poca_idx[idx]]
-
-    #     if self.poca_idx[idx] in nbhr_indices:
-    #         nbhr_indices = nbhr_indices[nbhr_indices != self.poca_idx[idx]]
-    #     else:
-    #         nbhr_indices = nbhr_indices[:-1]
-
-        
-    #     nbhrs = np.zeros((nbhr_indices.shape[0], self.n))
-    #     nbhrs[:, self.k] = self.on_mfld_pts_k[nbhr_indices]
-    #     nbhr_local_coords = nbhrs - on_mfld_pt
-        
-
-    #     # pca = PCA(n_components=self.k-1) # manifold is (k-1) dim so tangent space should be same
-    #     # pca.fit(nbhr_local_coords)
-
-    #     # tangential_dirs = pca.components_
-    #     # normal_dirs = spla.null_space(tangential_dirs).T
-
-    #     # tangential_dirs += on_mfld_pt
-    #     # normal_dirs += on_mfld_pt
-
-    #     tangential_dirs = self.tang_dset[self.poca_idx[idx]]
-    #     normal_dirs = self.norm_dset[self.poca_idx[idx]]
-
-    #     rdm_coeffs = np.random.normal(0, 1, size=tangential_dirs.shape[0])
-    #     delta = np.sum(rdm_coeffs.reshape(-1, 1) * tangential_dirs, axis=0)
-
-    #     prturb_size = np.random.uniform(1e-8, self.max_t_delta)
-    #     delta = (prturb_size / np.linalg.norm(delta, ord=2)) * delta
-
-    #     prturb_poca = on_mfld_pt + delta
-    #     if return_all:
-    #         return (
-    #             idx,
-    #             prturb_poca,
-    #             prturb_size, 
-    #             tangential_dirs,
-    #             normal_dirs
-    #         )
-    #     return (idx, prturb_poca, prturb_size)
-
+    
     def make_perturbed_poca(self, pp_chunk_size=5000):
         """
         :param pp_chunk_size: chunk size for parallel processing
@@ -503,21 +583,6 @@ class ConcentricSpheres(Dataset):
             logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
             self.nn_distances, self.nn_indices = self.find_knn(Y)
 
-        # global N, n, k, num_pos, num_neg, nn_distances, nn_indices, poca, poca_idx, tang_dset, norm_dset, max_t_delta
-        # global N, poca, poca_idx, tang_dset, max_t_delta
-
-        # if N is None: N = self.N
-        # if n is None: n = self.n
-        # if k is None: k = self.k
-        # if num_pos is None: num_pos = self.num_pos
-        # if num_neg is None: num_neg = self.num_neg
-        # if nn_indices is None: nn_indices = self.nn_indices
-        # if nn_distances is None: nn_distances = self.nn_distances
-        # if poca is None: poca = self.poca
-        # if poca_idx is None: poca_idx = self.poca_idx
-        # if tang_dset is None: tang_dset = self.tang_dset
-        # # if norm_dset is None: norm_dset = self.norm_dset
-        # if max_t_delta is None: max_t_delta = self.max_t_delta
 
         if os.path.exists(self.new_poca_dir):
             logger.info("[ConcentricSpheres]: new_poca_dir already exists. removing and recreating...")
@@ -546,9 +611,9 @@ class ConcentricSpheres(Dataset):
                     )
                 )
 
-            cur_new_poca_dir_idx = 0
-            cur_new_poca_dir_name = os.path.join(self.new_poca_dir, str(cur_new_poca_dir_idx))
-            os.makedirs(cur_new_poca_dir_name, exist_ok=True)
+            # cur_new_poca_dir_idx = 0
+            # cur_new_poca_dir_name = os.path.join(self.new_poca_dir, str(cur_new_poca_dir_idx))
+            # os.makedirs(cur_new_poca_dir_name, exist_ok=True)
 
             end_j = min(i + pp_chunk_size, self.num_neg)
             for j in range(i, end_j):
@@ -587,11 +652,7 @@ class ConcentricSpheres(Dataset):
 
                 self.class_labels[tmp2] = 2
         
-        # N = None
-        # poca = None
-        # poca_idx = None
-        # tang_dset = None
-        # max_t_delta = None
+
 
     def make_inferred_off_mfld_eg(self, pp_chunk_size=5000):
         """
@@ -606,16 +667,6 @@ class ConcentricSpheres(Dataset):
             else:
                 self.new_nn_distances, self.new_nn_indices = self.find_knn(self.new_poca_dset[:], use_new=False)
 
-        # global num_neg, num_pos, max_norm, new_poca_dset, recomp_tn, use_new_knn, poca_idx, new_nn_indices, new_nn_distances
-        # if max_norm is None: max_norm = self.max_norm
-        # if num_neg is None: num_neg = self.num_neg
-        # if num_pos is None: num_pos = self.num_pos
-        # if new_poca_dset is None: new_poca_dset = self.new_poca_dset
-        # if recomp_tn is None: recomp_tn = self.recomp_tn
-        # if use_new_knn is None: use_new_knn = self.use_new_knn
-        # if poca_idx is None: poca_idx = self.poca_idx
-        # if new_nn_distances is None: new_nn_distances = self.new_nn_distances
-        # if new_nn_indices is None: new_nn_indices = self.new_nn_indices
 
         if self.all_points is None:
             self.all_points = np.zeros((self.N, self.n))
@@ -691,29 +742,24 @@ class ConcentricSpheres(Dataset):
         self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 1] = self.M
         self.all_actual_distances[self.S1.genattrs.N + self.S2.genattrs.num_neg:, 0] = self.M
 
-        # max_norm = None
-        # num_neg = None
-        # num_pos = None
-        # new_poca_dset = None
-        # recomp_tn = None
-        # use_new_knn = None
-        # poca_idx = None
-        # new_nn_distances = None
-        # new_nn_indices = None
 
     def compute_inferred_points(self):
 
         self._inf_setup()
         logger.info("initial setup complete")
-        # print("after setup", self.nn_indices)
-        self.get_tn_for_on_mfld_pts(pp_chunk_size=5000)
+        if not self.avoid_io:
+            # print("after setup", self.nn_indices)
+            self.get_tn_for_on_mfld_pts(pp_chunk_size=5000)
 
         # print("after tn", self.nn_indices)
         if not self.online:
-            self.make_perturbed_poca(pp_chunk_size=5000)
-            # print("after perturbation", self.nn_indices)
-            self.make_inferred_off_mfld_eg(pp_chunk_size=5000)
-            # print("off mfld eg", self.nn_indices)
+            if not self.avoid_io:
+                self.make_perturbed_poca(pp_chunk_size=5000)
+                # print("after perturbation", self.nn_indices)
+                self.make_inferred_off_mfld_eg(pp_chunk_size=5000)
+                # print("off mfld eg", self.nn_indices)
+            else:
+                self.make_inferred_off_mfld2(pp_chunk_size=5000)
 
             num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
             self.all_points[self.S1.genattrs.num_neg:self.S1.genattrs.N, :self.k] = self.on_mfld_pts_k_[:num_on_mfld_S1]
@@ -725,7 +771,7 @@ class ConcentricSpheres(Dataset):
             assert (self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 0] == 0).all()
             assert (self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 1] == 0).all()
             assert (self.class_labels[:self.S1.genattrs.num_neg] == 2).all()
-            assert (self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] == 2).all()
+            assert (self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] == 2).all(), np.unique(self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg], return_counts=True)
 
             if self.all_distances is None:
                 self.all_distances = self.all_actual_distances.copy()
@@ -1061,24 +1107,29 @@ class ConcentricSpheres(Dataset):
                 else:
                     setattr(self, attr, attrs[attr])
 
+        if self.tang_dir is not None:
+            self.tang_dset = TensorFileDataset(
+                root_dir = self.tang_dir,
+                total_len = self.num_pos,
+                per_dir_size = 50000
+            )
+        else: self.tang_dset = None
+        
+        if self.norm_dir is not None:
+            self.norm_dset = TensorFileDataset(
+                root_dir = self.norm_dir,
+                total_len = self.num_pos,
+                per_dir_size = 50000
+            )
+        else: self.norm_dset = None
 
-        self.tang_dset = TensorFileDataset(
-            root_dir = self.tang_dir,
-            total_len = self.num_pos,
-            per_dir_size = 50000
-        )
-
-        self.norm_dset = TensorFileDataset(
-            root_dir = self.norm_dir,
-            total_len = self.num_pos,
-            per_dir_size = 50000
-        )
-
-        self.new_poca_dset = TensorFileDataset(
-            root_dir = self.new_poca_dir,
-            total_len = self.num_neg,
-            per_dir_size = 50000
-        )
+        if self.new_poca_dir is not None:
+            self.new_poca_dset = TensorFileDataset(
+                root_dir = self.new_poca_dir,
+                total_len = self.num_neg,
+                per_dir_size = 50000
+            )
+        else: self.new_poca_dset = None
 
         if os.path.exists(S1_dump):
             self.S1 = RandomSphere()
@@ -1099,14 +1150,24 @@ class ConcentricSpheres(Dataset):
         S1_dir = None
         S2_dir = None
         
-        cache_dump_path = self._get_save_cache_path(save_dir)
-        if os.path.exists(cache_dump_path):
-            shutil.rmtree(cache_dump_path)
-        os.rename(self.cache_dir, cache_dump_path)
-        self._cache_dir = cache_dump_path
-        self.tang_dir = os.path.join(self.cache_dir, "tangents_at_poca")
-        self.norm_dir = os.path.join(self.cache_dir, "normals_at_poca")
-        self.new_poca_dir = os.path.join(self.cache_dir, "new_poca")
+        if self.N >= 1e+7:
+            ## Saving cache dir was taking a ton of memory (of the order of 800 GBs for N=1e+7)
+            logger.info("[ConcentricSpheres]: deleting cache before saving...")
+            shutil.rmtree(self.cache_dir)
+            self._cache_dir = None
+            self.tang_dir = None
+            self.norm_dir = None
+            self.new_poca_dir = None
+        else:
+            cache_dump_path = self._get_save_cache_path(save_dir)
+            if os.path.exists(cache_dump_path):
+                shutil.rmtree(cache_dump_path)
+            if os.path.exists(self.cache_dir) and (not self.avoid_io):
+                shutil.move(self.cache_dir, cache_dump_path)
+            self._cache_dir = cache_dump_path
+            self.tang_dir = os.path.join(self.cache_dir, "tangents_at_poca")
+            self.norm_dir = os.path.join(self.cache_dir, "normals_at_poca")
+            self.new_poca_dir = os.path.join(self.cache_dir, "new_poca")
 
         if self.N < 1e+7:
             S1_dir = os.path.join(save_dir, "S1_dump")
@@ -1574,37 +1635,9 @@ class ConcentricSpheres(Dataset):
 
 
 
-def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k,\
-     tang_dset_per_dir_size, norm_dset_per_dir_size, tang_dir, norm_dir):
+def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k, \
+     tang_dset_per_dir_size=None, norm_dset_per_dir_size=None, tang_dir=None, norm_dir=None, return_dirs=True):
     """compute tangential and normal directions for all on-manifold points"""
-    
-    # if nn_indices is None or nn_distances is None:
-    #     raise RuntimeError("knn's not predicted yet!")
-
-    # on_mfld_pt = None
-    # if on_mfld_pts_trivial_ is None:
-    #     on_mfld_pt = np.zeros(n)
-    #     on_mfld_pt[:, k] = on_mfld_pts_k_[idx]
-    # else:
-    #     on_mfld_pt = on_mfld_pts_trivial_[idx]
-    # nbhr_indices = nn_indices[idx]
-    # # nbhr_dists = nn_distances[idx]
-
-    # if idx in nbhr_indices:
-    #     nbhr_indices = nbhr_indices[nbhr_indices != idx]
-    # else:
-    #     nbhr_indices = nbhr_indices[:-1]
-
-    # nbhr_indices = nbhr_indices.astype(np.int64)
-    # nbhrs = None
-    # if on_mfld_pts_trivial_ is None:
-    #     nbhrs = np.zeros((nbhr_indices.shape[0], n))
-    #     nbhrs[:, :k] = on_mfld_pts_k_[nbhr_indices]
-    # else:
-    #     nbhrs = on_mfld_pts_trivial_[nbhr_indices]
-    
-    # nbhr_local_coords = nbhrs - on_mfld_pt
-    # # print(nbhr_indices)
     
     pca = PCA(n_components=k-1) # manifold is (k-1) dim so tangent space should be same
     pca.fit(nbhr_local_coords)
@@ -1615,18 +1648,21 @@ def _get_tn_for_on_mfld_idx(idx, nbhr_local_coords, k,\
     # tangential_dirs = np.ones((k - 1, 500))
     # normal_dirs = np.ones((500 - k + 1, 500))
 
-    cur_tang_dir_idx = idx // tang_dset_per_dir_size
-    cur_tang_dir_name = os.path.join(tang_dir, str(cur_tang_dir_idx))
-    os.makedirs(cur_tang_dir_name, exist_ok=True)
-    tang_fn = os.path.join(cur_tang_dir_name, str(idx) + ".pth")
-    torch.save(tangential_dirs, tang_fn)
+    if tang_dir is not None and tang_dset_per_dir_size is not None:
+        cur_tang_dir_idx = idx // tang_dset_per_dir_size
+        cur_tang_dir_name = os.path.join(tang_dir, str(cur_tang_dir_idx))
+        os.makedirs(cur_tang_dir_name, exist_ok=True)
+        tang_fn = os.path.join(cur_tang_dir_name, str(idx) + ".pth")
+        torch.save(tangential_dirs, tang_fn)
 
-    cur_norm_dir_idx = idx // norm_dset_per_dir_size
-    cur_norm_dir_name = os.path.join(norm_dir, str(cur_norm_dir_idx))
-    os.makedirs(cur_norm_dir_name, exist_ok=True)
-    norm_fn = os.path.join(cur_norm_dir_name, str(idx) + ".pth")
-    torch.save(normal_dirs, norm_fn)
+    if norm_dir is not None and norm_dset_per_dir_size is not None:
+        cur_norm_dir_idx = idx // norm_dset_per_dir_size
+        cur_norm_dir_name = os.path.join(norm_dir, str(cur_norm_dir_idx))
+        os.makedirs(cur_norm_dir_name, exist_ok=True)
+        norm_fn = os.path.join(cur_norm_dir_name, str(idx) + ".pth")
+        torch.save(normal_dirs, norm_fn)
     # print(idx, tang_dset_per_dir_size, norm_dset_per_dir_size, cur_tang_dir_idx)
+    if return_dirs: return np.array((tangential_dirs, normal_dirs)).reshape(-1, tangential_dirs.shape[1])
     # return (idx, tangential_dirs, normal_dirs)
 
 
@@ -1671,7 +1707,7 @@ def _make_perturbed_poca_for_idx(idx, poca, poca_idx, max_t_delta,\
     return (idx, prturb_poca, prturb_size)
 
 
-def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
+def _make_off_mfld_eg_for_idx(idx, poca_idx, new_nbhrs, new_poca_dset,\
      norm_dset, recomp_tn, max_norm, return_all=False):
         
     on_mfld_pt = new_poca_dset[idx]
@@ -1744,3 +1780,61 @@ def _make_off_mfld_eg_for_idx(idx, poca_idx,new_nbhrs, new_poca_dset,\
             normal_dirs
         )
     return (idx, off_mfld_pt, rdm_norm)
+
+
+def _make_off_mfld_eg_for_idx2(idx, on_mfld_pt, nbhr_local_coords, poca_idx_count, k, max_t_delta, max_norm, return_all=False):
+    """
+    1. make tangents and normals
+    2. do tangential perturbation
+    3. do normal perturbation
+    4. return final off mfld examples
+
+
+    :param idx: index of on-manifold point
+    :param poca_idx_count: number of times such that self.poca_idx == idx
+    :param nbhr_local_coords: local co-ordinates of the neighbors
+    :param k: intrinsic dimensions
+    :param poca_idx: indices of poca_idx that are equal to idx
+    """
+
+    pca = PCA(n_components=k-1) # manifold is (k-1) dim so tangent space should be same
+    pca.fit(nbhr_local_coords)
+
+    tangential_dirs = pca.components_
+    normal_dirs = spla.null_space(tangential_dirs).T
+
+    on_mfld_pb_coeffs = np.random.normal(size=(poca_idx_count, tangential_dirs.shape[0]))
+    on_mfld_pb = np.dot(on_mfld_pb_coeffs, tangential_dirs)
+    on_mfld_pb_sizes = np.random.uniform(0, max_t_delta, size=(on_mfld_pb.shape[0]))
+    on_mfld_pb = on_mfld_pb * (on_mfld_pb_sizes / np.linalg.norm(on_mfld_pb, axis=0, ord=2)).reshape(-1, 1)
+
+    new_poca_for_idx = on_mfld_pt + on_mfld_pb
+    assert new_poca_for_idx.shape[0] == poca_idx_count.shape[0]
+
+    off_mfld_pb_coeffs = random.normal(size=(new_poca_for_idx.shape[0], normal_dirs.shape[0]))
+    off_mfld_pb = np.dot(off_mfld_pb_coeffs, normal_dirs)
+    off_mfld_pb_sizes = np.random.uniform(0, max_norm, size=(off_mfld_pb.shape[0]))
+    off_mfld_pb = off_mfld_pb * (off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=0, ord=2)).reshape(-1, 1)
+
+    off_mfld_pts_for_idx = new_poca_for_idx + off_mfld_pb
+
+    if return_all:
+        return (
+            idx,
+            on_mfld_pt, 
+            nbhr_local_coords,
+            k,
+            poca_idx_count,
+            tangential_dirs, 
+            normal_dirs,
+            new_poca_for_idx,
+            off_mfld_pts_for_idx
+        )
+
+    return (
+        idx,
+        off_mfld_pts_for_idx
+    )
+
+
+
