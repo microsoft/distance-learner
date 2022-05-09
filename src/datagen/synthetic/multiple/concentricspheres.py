@@ -430,7 +430,7 @@ class ConcentricSpheres(Dataset):
                 self.off_mfld_pts_for_chunk = torch.from_numpy(off_mfld_pts_for_chunk)
 
             indices_to_use = sum([[((j) * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
-            logger.info("indices_to_use: {}".format(indices_to_use[:10]))
+            # logger.info("indices_to_use: {}".format(indices_to_use[:10]))
             assert len(indices_to_use) == np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
             total_num_neg_made += np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
             off_mfld_pts = off_mfld_pts_for_chunk.reshape(-1, self.n)[indices_to_use]
