@@ -1148,7 +1148,7 @@ class ConcentricSpheres(Dataset):
 
         if os.path.exists(S2_dump):
             self.S2 = RandomSphere()
-            self.S2.load_data((S2_dump))
+            self.S2.load_data(S2_dump)
 
     def _get_save_cache_path(self, save_dir):
         cache_dump = os.path.join(save_dir, "cache")

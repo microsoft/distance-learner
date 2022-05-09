@@ -771,8 +771,14 @@ class RandomSphere(Manifold, Dataset):
             for attr in vars(attr_set):
                 if attr in attrs:
                     if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
-                        data_attr = torch.load(attrs[attr]["path"])
-                        logger.info("[RandomSphere]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                        if os.path.exists(attrs[attr]["path"]):
+                            data_attr = torch.load(attrs[attr]["path"])
+                            logger.info("[RandomSphere]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                        else:
+                            data_fn = os.path.basename(attrs[attr]["path"])
+                            path = os.path.join(dump_dir, data_fn)
+                            data_attr = torch.load(path)
+                            logger.info("[RandomSphere]: data attribute ({}) loaded from file: {}".format(attr, path))
                         setattr(attr_set, attr, data_attr)
                     else:
                         setattr(attr_set, attr, attrs[attr])
