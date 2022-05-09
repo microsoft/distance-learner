@@ -1108,9 +1108,12 @@ class ConcentricSpheres(Dataset):
                     else:
                         data_dir = os.path.join(dump_dir, "data")
                         data_fn = os.path.basename(attrs[attr]["path"])
-                        data_fn_dir = os.path.split(os.path.split(attrs[attr]["path"])[0])[0]
-                        path = os.path.join(data_dir, data_fn_dir, data_fn)
-                        data_dir = torch.load(path)
+                        data_fn_split = os.path.split(os.path.split(attrs[attr]["path"])[0])[0]
+                        path = os.path.join(data_dir, data_fn_split, data_fn)
+                        logger.info("data_dir: {}".format(data_dir))
+                        logger.info("data_fn: {}".format(data_fn))
+                        logger.info("data_fn_split: {}".format(data_fn_split))
+                        data_attr = torch.load(path)
                         logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, path))
                     setattr(self, attr, data_attr)
                 else:
