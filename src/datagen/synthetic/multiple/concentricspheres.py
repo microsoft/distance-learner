@@ -1101,8 +1101,17 @@ class ConcentricSpheres(Dataset):
                 continue
             if attr in attrs:
                 if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
-                    data_attr = torch.load(attrs[attr]["path"])
-                    logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                    data_attr = None
+                    if os.path.exists(attrs[attr]["path"]):
+                        data_attr = torch.load(attrs[attr]["path"])
+                        logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                    else:
+                        data_dir = os.path.join(dump_dir, "data")
+                        data_fn = os.path.basename(attrs[attr]["path"])
+                        data_fn_dir = os.path.split(os.path.split(attrs[attr]["path"])[0])[0]
+                        path = os.path.join(data_dir, data_fn_dir, data_fn)
+                        data_dir = torch.load(path)
+                        logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, path))
                     setattr(self, attr, data_attr)
                 else:
                     setattr(self, attr, attrs[attr])
