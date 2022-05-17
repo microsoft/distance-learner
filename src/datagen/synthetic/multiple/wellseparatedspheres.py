@@ -38,7 +38,7 @@ class WellSeparatedSpheres(Dataset):
 
     def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
                 sigma=5, seed=42, r=[10, 10], x_ck=None, rotation=None, translation=None,\
-                normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
+                shifting_vec=None, normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
                 max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", c_dist=None, **kwargs):
         """
@@ -71,7 +71,9 @@ class WellSeparatedSpheres(Dataset):
         self._augment = augment
         self._inferred = inferred
         self._x_ck = x_ck
-        self._x_ck = np.random.normal(self._mu, self._sigma, (2, self._k))
+        if x_ck is None:
+            self._x_ck = np.random.normal(self._mu, self._sigma, (2, self._k))
+
         self._c_dist = c_dist
         
         self._x_cn = None
@@ -90,7 +92,7 @@ class WellSeparatedSpheres(Dataset):
         self._gamma = gamma
         self._fix_center = None
         self._anchor = anchor
-
+        self._shifting_vec = shifting_vec
         
         self._uuid = str(uuid.uuid4())
         self._cache_dir = os.path.join(cache_dir, self._uuid)
@@ -881,17 +883,19 @@ class WellSeparatedSpheres(Dataset):
 
     def _reposition_spheres(self):
         """repositions S2 so that the 2 spheres are not extremely far apart"""
-        req_c_dist = self.c_dist    
-        if self.c_dist is None:
-            logger.info("[WellSeparatedSpheres]: no c_dist given. using heuristics...")
-            req_c_dist = (sum(self.r) + 2*self.max_norm) * 1.1
-            self._c_dist = req_c_dist
-            logger.info("[WellSeparatedSpheres]: setting c_dist := {}".format(self.c_dist))
-        
-        logger.info("[WellSeparatedSpheres]: using c_dist = {}".format(self.c_dist))
-        shifting_vec = np.random.normal(self.mu, self.sigma, self.n)
-        shifting_vec = self.c_dist * (shifting_vec / np.linalg.norm(shifting_vec, ord=2))
-        shifting_vec = shifting_vec + self.x_cn[0]
+        if self._shifting_vec is None:
+            req_c_dist = self.c_dist    
+            if self.c_dist is None:
+                logger.info("[WellSeparatedSpheres]: no c_dist given. using heuristics...")
+                req_c_dist = (sum(self.r) + 2*self.max_norm) * 1.1
+                self._c_dist = req_c_dist
+                logger.info("[WellSeparatedSpheres]: setting c_dist := {}".format(self.c_dist))
+            
+            logger.info("[WellSeparatedSpheres]: using c_dist = {}".format(self.c_dist))
+            self._shifting_vec = np.random.normal(self.mu, self.sigma, self.n)
+            self._shifting_vec = self.c_dist * (self._shifting_vec / np.linalg.norm(self._shifting_vec, ord=2))
+            self._shifting_vec = self._shifting_vec + self.x_cn[0]
+
 
         if not self.inferred:
             
@@ -899,8 +903,8 @@ class WellSeparatedSpheres(Dataset):
             if self.N <= 1e+7:
                 self.old_S2 = copy.deepcopy(self.S2)
             self.S2.genattrs.points_n -= self.S2.specattrs.x_cn
-            self.S2.genattrs.points_n += shifting_vec
-            self.S2.specattrs.x_cn = shifting_vec
+            self.S2.genattrs.points_n += self._shifting_vec
+            self.S2.specattrs.x_cn = self._shifting_vec
 
         else:
             """
@@ -915,9 +919,9 @@ class WellSeparatedSpheres(Dataset):
                 }
             # print(self.all_points.shape)
             self.all_points[self.S1.genattrs.N:] -= self.x_cn[1]
-            self.all_points[self.S1.genattrs.N:] += shifting_vec
+            self.all_points[self.S1.genattrs.N:] += self._shifting_vec
 
-        self._x_cn[1] = shifting_vec
+        self._x_cn[1] = self._shifting_vec
         # print(self._x_cn)
         logger.info("[WellSeparatedSpheres]: S2 re-positioned")    
 
@@ -1297,6 +1301,7 @@ class WellSeparatedSpheres(Dataset):
         val_cfg["translation"] = train_set.translation
         val_cfg["x_ck"] = train_set.x_ck
         val_cfg["norm_factor"] = train_set.norm_factor
+        val_cfg["shifting_vec"] = train_set._shifting_vec
         val_set = cls(**val_cfg)
         val_set.compute_points()
         logger.info("[WellSeparatedSpheres]: val set generation done!")
@@ -1307,6 +1312,7 @@ class WellSeparatedSpheres(Dataset):
         test_cfg["translation"] = train_set.translation
         test_cfg["x_ck"] = train_set.x_ck
         test_cfg["norm_factor"] = train_set.norm_factor
+        test_cfg["shifting_vec"] = train_set._shifting_vec
         test_set = cls(**test_cfg)
         test_set.compute_points()
         logger.info("[WellSeparatedSpheres]: test set generation done!")
