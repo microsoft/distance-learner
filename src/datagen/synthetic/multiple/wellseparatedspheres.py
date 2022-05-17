@@ -760,7 +760,7 @@ class WellSeparatedSpheres(Dataset):
             for mfld_idx in range(self._x_cn.shape[0]):
                 self._x_cn[mfld_idx] += self.translation
                 self._x_cn[mfld_idx] = np.dot(self.rotation[mfld_idx], self.x_cn[mfld_idx])
-            print("before reposition x_cn:", self._x_cn)
+            # print("before reposition x_cn:", self._x_cn)
             self._reposition_spheres()
 
         else:
@@ -808,7 +808,7 @@ class WellSeparatedSpheres(Dataset):
         if not self.inferred:
             self._x_cn[1] = self.S2.specattrs.x_cn
             self._reposition_spheres()  
-        print("before compute x_cn:", self._x_cn)
+        # print("before compute x_cn:", self._x_cn)
         if not self.inferred: assert (self._x_cn[1] == self.S2.specattrs.x_cn).all() == True
         logger.info("[WellSeparatedSpheres]: Generated S2")
 
@@ -859,7 +859,7 @@ class WellSeparatedSpheres(Dataset):
             self.compute_inferred_points()
 
           
-        print("x_cn:", self._x_cn)
+        # print("x_cn:", self._x_cn)
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
         self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
@@ -1019,7 +1019,7 @@ class WellSeparatedSpheres(Dataset):
             )
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
-        print("in norm:", self._x_cn)
+        # print("in norm:", self._x_cn)
         if not resample: 
             self._anchor = np.mean(self._x_cn.numpy() if torch.is_tensor(self._x_cn) else self._x_cn, axis=0) / self.norm_factor
         
