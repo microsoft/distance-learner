@@ -1020,7 +1020,8 @@ class WellSeparatedSpheres(Dataset):
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
         print("in norm:", self._x_cn)
-        if not resample: self._anchor = np.mean(self._x_cn.numpy(), axis=0) / self.norm_factor
+        if not resample: 
+            self._anchor = np.mean(self._x_cn.numpy() if torch.is_tensor(self._x_cn) else self._x_cn, axis=0) / self.norm_factor
         
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
