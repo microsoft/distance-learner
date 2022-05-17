@@ -5,6 +5,7 @@ dtype = {
     "single-sphere": sphere.RandomSphere,
     "single-swissroll": swissroll.RandomSwissRoll,
     "ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
+    "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
     "conc-spheres": concentricspheres.ConcentricSpheres,
     "inf-conc-spheres": concentricspheres.ConcentricSpheres
 }

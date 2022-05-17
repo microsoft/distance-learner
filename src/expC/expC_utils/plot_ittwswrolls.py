@@ -11,21 +11,22 @@ import plotly.graph_objects as go
 from .common import *
 
 def make_plots(model, dataset, dump_dir, task="regression",\
-     batch_size=512, num_workers=8, cuda=0, num_points=50000):
+     batch_size=512, num_workers=8, cuda=0, thresh=None, num_points=50000):
 
     # intertwined swiss rolls are planar swiss rolls
     # so we will proceed as such
     n = 0
     k = 0
-    thresh = 0
     if isinstance(dataset, manifold.Manifold):
         n = dataset.genattrs.n
         k = dataset.genattrs.k
-        thresh = dataset.genattrs.D / dataset.genattrs.norm_factor
+        if thresh is None:
+            thresh = dataset.genattrs.D / dataset.genattrs.norm_factor
     else:
         n = dataset.n
         k = dataset.k
-        thresh = dataset.S1.genattrs.D / dataset.norm_factor
+        if thresh is None:
+            thresh = dataset.S1.genattrs.D / dataset.norm_factor
 
     points_k = get_coplanar_kdim_samples(dataset)
     points_k_classes = dataset.class_labels

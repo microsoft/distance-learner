@@ -5,19 +5,28 @@ import json
 import copy
 import time
 import random
-import inspect
+import multiprocessing
 from collections.abc import Iterable
+from functools import partial
 
 import numpy as np
 
 import matplotlib.pyplot as plt
 
 import torch
+from tqdm import tqdm
+from sklearn.decomposition import PCA
+import scipy.linalg as spla
 from torch.utils.data import Dataset
 
 # from manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
 from ..single.swissroll import *
 # from datagen.synthetic.single.swissroll import *
+
+from utils import *
+from datagen.datagen_utils import *
+
+logger = init_logger(__name__)
 
 class IntertwinedSwissRolls(Dataset):
 
@@ -25,7 +34,7 @@ class IntertwinedSwissRolls(Dataset):
                  sigma=5, seed=42, t_min=1.5, t_max=4.5, omega=np.pi, num_turns=None, noise=0,\
                  correct=True, scale=None, contract=2, g=identity, d_g=d_identity,\
                  height=21, rotation=None, translation=None, anchor=None, normalize=True, norm_factor=None,\
-                 gamma=0.5, **kwargs):
+                 gamma=0.5, online=False, M=1, inferred=False, max_t_delta=1e-3, nn=None, buffer_nbhrs=2, **kwargs):
 
         """
         :param t_min: start of time interval for sampling
@@ -49,10 +58,17 @@ class IntertwinedSwissRolls(Dataset):
         :type d_g: function
         :param height: 'height' of the swiss roll in the non-lateral directions
         :type height: float
+        :param M: distance to be used for farther manifold
+        :type M: float
+        :param inferred: whether to use inferred manifold for point computation
+        :type inferred: bool
         """
 
         self._N = N
         self._num_neg = num_neg
+        if num_neg is None:
+            self._num_neg = N // 2
+        self._num_pos = None if self._num_neg is None else self._N - self._num_neg
         self._n = n
         self._k = k
         self._D = D
@@ -60,7 +76,10 @@ class IntertwinedSwissRolls(Dataset):
         self._mu = mu
         self._sigma = sigma
         self._seed = seed
-        
+        self._M = M
+        self._inferred = inferred
+        self._online = online
+
         self._t_min = t_min
         self._t_max = t_max
         self._omega = omega
@@ -117,6 +136,46 @@ class IntertwinedSwissRolls(Dataset):
         self.gamma = gamma
         self.fix_center = None
 
+        ## only relevant when `self._inferred == True`
+
+        self.avoid_io = True # generate points without writing intermediate steps to disk
+
+        self.all_points_trivial_ = None
+        self.all_points_tr_ = None
+        self.all_points_rot_ = None
+
+        self._nn = nn # neighborhood size for kNN
+        if self._nn is None:
+            self._nn = k - 1
+        self._buf_nn = buffer_nbhrs # no. of buffer neighbors
+        
+        self.knn = None # Faiss kNN object
+        self.new_knn = None # to store new Faiss object after tangential perturbations
+        
+        self.nn_indices = None
+        self.nn_distances = None
+        self.new_nn_indices = None
+        self.new_nn_distances = None
+
+        self._max_t_delta = max_t_delta # maximum tangential perturbation allowed
+
+        self.poca_idx = None # indices of points of closes approach in on-manifold points
+        self.poca_idx_counts = None # number of times the ith on-manifold point was used to make off-manifold points
+        self.new_poca = None # points of closest approach after applying tangential perturbations
+        self.new_poca_prturb_sizes = None # perturbation size of tangential perturbation
+
+        self.on_mfld_pts_k_ = None # all on-manifold points
+        self.on_mfld_pts_trivial_ = None # trivial embeddings of on-manifold points
+
+        self.tang_dir = None
+        self.norm_dir = None
+        self.new_poca_dir = None
+        self.tang_dset = None
+        self.norm_dset = None
+        self.new_poca_dset = None
+
+
+
     @property 
     def N(self):
         return self._N
@@ -132,6 +191,22 @@ class IntertwinedSwissRolls(Dataset):
     @num_neg.setter
     def num_neg(self, x):
         return RuntimeError("cannot set `num_neg` after instantiation")
+
+    @property
+    def num_pos(self):
+        return self._num_pos
+
+    @num_pos.setter
+    def num_pos(self, x):
+        return RuntimeError("cannot set `num_pos` after instantiation")
+
+    @property
+    def online(self):
+        return self._online
+
+    @online.setter
+    def online(self, x):
+        return RuntimeError("cannot set `online` after instantiation")
 
     @property
     def n(self):
@@ -294,6 +369,38 @@ class IntertwinedSwissRolls(Dataset):
     def traslation(self, x):
         raise RuntimeError("cannot set `translation` after instantiation!")
 
+    @property
+    def nn(self):
+        return self._nn
+
+    @nn.setter
+    def nn(self, nn):
+        raise RuntimeError("cannot set `nn` after instantiation!")
+
+    @property
+    def buf_nn(self):
+        return self._buf_nn
+
+    @buf_nn.setter
+    def buf_nn(self, buf_nn):
+        raise RuntimeError("cannot set `buf_nn` after instantiation!")
+
+    @property
+    def max_t_delta(self):
+        return self._max_t_delta
+
+    @max_t_delta.setter
+    def max_t_delta(self, max_t_delta):
+        raise RuntimeError("cannot set `max_t_delta` after instantiation!")
+
+    @property
+    def M(self):
+        return self._M
+
+    @M.setter
+    def M(self, M):
+        raise RuntimeError("cannot set `M` after instantiation!")
+
 
     def compute_points(self):
 
@@ -306,10 +413,10 @@ class IntertwinedSwissRolls(Dataset):
             num_turns=self._num_turns, noise=self._noise, correct=self._correct,\
             scale=self._scale, g=self.g_text, d_g=self.d_g_text, height=self._height, rotation=self._rotation,\
             translation=self._translation, normalize=self._normalize, norm_factor=self._norm_factor,\
-            gamma=self._gamma)
+            gamma=self._gamma, inferred=self._inferred)
 
         self.S1.compute_points()
-        print("[InterTwinedSwissRolls]: Generated S1")
+        logger.info("[IntertwinedSwissRolls]: Generated S1")
 
         self.S2 = RandomSwissRoll(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
             k=self._k, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
@@ -317,33 +424,42 @@ class IntertwinedSwissRolls(Dataset):
             num_turns=self._num_turns, noise=self._noise, correct=self._correct,\
             scale=self._scale, g=self.g_contract_text, d_g=self.dg_contract_text, height=self._height, rotation=self._rotation,\
             translation=self._translation, normalize=self._normalize, norm_factor=self._norm_factor,\
-            gamma=self._gamma)
+            gamma=self._gamma, inferred=self._inferred)
 
         self.S2.compute_points()
-        print("[InterTwinedSwissRolls]: Generated S2")
+        logger.info("[IntertwinedSwissRolls]: Generated S2")
 
-        self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
-        
-        self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
-        self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
-        self.all_distances[:self.S1.genattrs.N, 1] = self._D
-        self.all_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.distances.reshape(-1)
-        self.all_distances[self.S1.genattrs.N:, 0] = self._D
+        if not self._inferred:
+            self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
+            
+            self.all_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+            self.all_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.distances.reshape(-1)
+            self.all_distances[:self.S1.genattrs.N, 1] = self._D
+            self.all_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.distances.reshape(-1)
+            self.all_distances[self.S1.genattrs.N:, 0] = self._D
 
-        # giving class labels
-        # 2: no manifold; 0: S_1; 1: S_2
-        self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
-        self.class_labels[:self.S1.genattrs.num_neg] = 2
-        self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
-        self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
-        self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
+            # giving class labels
+            # 2: no manifold; 0: S_1; 1: S_2
+            self.class_labels = np.zeros(self.S1.genattrs.N + self.S2.genattrs.N, dtype=np.int64)
+            self.class_labels[:self.S1.genattrs.num_neg] = 2
+            self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+            self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] = 2
+            self.class_labels[self.S1.genattrs.N + self.S2.genattrs.num_neg:] = 1
 
-        # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
-        self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
-        self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
-        self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
-        self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
+            # true distances of points in S1 to S2 and vice versa are not available and marked `-1`
+            self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+            self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
+            self.all_actual_distances[:self.S1.genattrs.N, 1] = self.M
+            self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
+            self.all_actual_distances[self.S1.genattrs.N:, 0] = self.M
+            # self.all_actual_distances = np.zeros((self.S1.genattrs.N + self.S2.genattrs.N, 2))
+            # self.all_actual_distances[:self.S1.genattrs.N, 0] = self.S1.genattrs.actual_distances.reshape(-1)
+            # self.all_actual_distances[:self.S1.genattrs.N, 1] = np.inf
+            # self.all_actual_distances[self.S1.genattrs.N:, 1] = self.S2.genattrs.actual_distances.reshape(-1)
+            # self.all_actual_distances[self.S1.genattrs.N:, 0] = np.inf
+
+        else:
+            self.compute_inferred_points()
 
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
@@ -352,23 +468,300 @@ class IntertwinedSwissRolls(Dataset):
 
         if self._normalize:
             self.norm()
-            print("[InterTwinedSwissRolls]: Overall noramalization done")
+            logger.info("[IntertwinedSwissRolls]: Overall noramalization done")
 
         self.get_all_points_k()
 
+    def _make_poca_idx(self):
+        self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
+        self.poca_idx[:self.num_neg // 2] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, dtype=np.int64), size=self.S1.genattrs.num_neg, replace=True).astype(np.int64)
+        self.poca_idx[self.num_neg // 2:] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, self.num_pos, dtype=np.int64), size=self.S2.genattrs.num_neg, replace=True).astype(np.int64)
+        self.poca_idx_counts = np.zeros(self.num_pos).astype(np.int64)
+        tmp = np.unique(self.poca_idx, return_counts=True)
+        self.poca_idx_counts[tmp[0]] = tmp[1]
+        
+    def _collect_on_mfld_k(self):
+        self.on_mfld_pts_k_ = np.zeros((self.num_pos, self.k))
+        num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+        self.on_mfld_pts_k_[:num_on_mfld_S1] = self.S1.genattrs.points_k
+        self.on_mfld_pts_k_[num_on_mfld_S1:] = self.S2.genattrs.points_k
+        if self.N < 1e+7:
+            self.on_mfld_pts_trivial_ = np.zeros((self.num_pos, self.n))
+            self.on_mfld_pts_trivial_[:, :self.k] = self.on_mfld_pts_k_
+
+    def _inf_setup(self):
+        """setting up data for off manifold samples when computing inferred manifold"""
+        self._make_poca_idx()
+        logger.info("[IntertwinedSwissRolls]: made poca_idx")
+        self._collect_on_mfld_k()
+        logger.info("[IntertwinedSwissRolls]: collect on-mfld k-dim points from both spheres")
+        
+        
+
+    def find_knn(self, X, use_new=False):
+        """
+            get k-nearest neighbors of on-manifold points in n-dims
+            if `use_new == True`, then use `self.new_knn` for computation
+            that is trained on `self.new_poca`
+        """
+        logger.info("[IntertwinedSwissRolls]: use_new == {}".format(use_new))
+        if not use_new:
+            
+            if self.knn is None:
+                self.knn = FaissKNeighbors(k=self.nn + self.buf_nn)
+                to_fit = self.on_mfld_pts_trivial_
+                if self.on_mfld_pts_trivial_ is None:
+                    to_fit = np.zeros((self.N, self.n))
+                    to_fit[:, self.k] = self.on_mfld_pts_k_
+                logger.info("[IntertwinedSwissRolls]: fitting knn...")
+                self.knn.fit(to_fit)
+                logger.info("[IntertwinedSwissRolls]: knn fit done")
+
+            logger.info("[IntertwinedSwissRolls]: predicting nbhrs...")
+            distances, indices = self.knn.predict(X)
+            logger.info("[IntertwinedSwissRolls]: prediction complete...")
+
+        else:
+            if self.new_knn is None:
+                logger.info("[IntertwinedSwissRolls]: new_knn is None. fitting now...")
+                self.new_knn = FaissKNeighbors(k=self.nn + self.buf_nn)
+                logger.info("[IntertwinedSwissRolls]: fitting new_knn...")
+                self.new_knn.fit(self.new_poca_dset[:])
+                logger.info("[IntertwinedSwissRolls]: new_knn fit done")
+
+            logger.info("[IntertwinedSwissRolls]: predicting nbhrs...")
+            distances, indices = self.new_knn.predict(X)
+            logger.info("[IntertwinedSwissRolls]: prediction complete...")
+
+        return distances, indices
+
+    def make_inferred_off_mfld2(self, pp_chunk_size=50000):
+        """
+        roll in T&N construction, on mfld perturbation, and off mfld 
+        perturbation all into one. avoid I/O
+
+        :param pp_chunk_size: chunk size for parallel processing
+        """
+        if self.nn_distances is None or self.nn_indices is None:
+            logger.info("[IntertwinedSwissRolls]: knn not computed. computing now ...")
+            X = None
+            if self.on_mfld_pts_trivial_ is None:
+                X = np.zeros((self.N, self.n))
+                X[:, self.k] = self.on_mfld_pts_k_
+                self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
+            else:
+                self.nn_distances, self.nn_indices = self.find_knn(self.on_mfld_pts_trivial_, use_new=False)
+        
+        
+
+        if self.class_labels is None:
+            self.class_labels = np.zeros(self.N).astype(np.int64)
+        if self.all_actual_distances is None:
+            self.all_actual_distances = np.zeros((self.N, 2))
+        if self.all_points is None:
+            self.all_points = np.zeros((self.N, self.n))
+        
+        num_offmfld_per_idx = max(self.poca_idx_counts)
+        total_num_neg_made = 0
+        # print(num_offmfld_per_idx)
+
+        S1_off_mfld_idx = 0
+        S2_off_mfld_idx = self.S1.genattrs.N
+
+        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing off mfld (2)"):
+
+            nbhr_indices = self.nn_indices[i:min(self.num_pos, i+pp_chunk_size)]
+            mask = np.equal(nbhr_indices, np.arange(i, min(self.num_pos, i+pp_chunk_size)).reshape(-1, 1))
+            mask[mask.sum(axis=1) == 0, -1] = True
+            nbhr_indices = nbhr_indices[~mask].reshape(nbhr_indices.shape[0], nbhr_indices.shape[1] - 1).astype(np.int64)
+
+            on_mfld_pts = None
+            nbhrs = None
+            if self.on_mfld_pts_trivial_ is None:
+                on_mfld_pts = np.zeros((pp_chunk_size, self.n))
+                on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
+
+                nbhrs = np.zeros((pp_chunk_size, nbhr_indices.shape[1], self.n))
+                nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices]
+            else:
+                on_mfld_pts = self.on_mfld_pts_trivial_[i:i+pp_chunk_size]
+                nbhrs = self.on_mfld_pts_trivial_[nbhr_indices]
+            # nbhrs - > (50000, 50, 500) on_mfld_pts -> (50000, 500)
+            nbhr_local_coords = (nbhrs.transpose(1, 0, 2) - on_mfld_pts).transpose(1, 0, 2)
+            # print(nbhr_local_coords.shape)
+            #
+            # torch.save({
+            #     "on_mfld_pts": on_mfld_pts,
+            #     "nbhrs": nbhrs
+            # },"/data/tmp/k{}n{}.pth".format(self.k, self.n))
+                       
+            _get_tn_for_on_mfld_idx_partial = partial(_get_tn_for_on_mfld_idx, \
+                k=self.k,
+                return_dirs=True)
+
+            
+            with multiprocessing.Pool(processes=24) as pool:
+                
+                all_tang_and_norms = pool.starmap(
+                    _get_tn_for_on_mfld_idx_partial, 
+                    zip(
+                        range(i, int(min(i + pp_chunk_size, self.num_pos))),
+                        nbhr_local_coords
+                        )
+                    )
+            all_tang_and_norms = np.array(all_tang_and_norms)
+            if self.N <= 20000:
+                self.all_tang_and_norms = all_tang_and_norms
+
+            actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
+
+            on_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.k - 1))
+            # print(on_mfld_pb_coeffs.shape, all_tang_and_norms.shape)
+            on_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
+            on_mfld_pb_sizes = np.random.uniform(0, self.max_t_delta, size=(actual_chunk_size, num_offmfld_per_idx))
+            
+            # the next line was giving an error in ipython for some reason. will take a closer look later
+            # hint: https://stackoverflow.com/questions/57507832/unable-to-allocate-array-with-shape-and-data-type
+            # on_mfld_pb = np.dot(on_mfld_pb_coeffs, all_tang_and_norms[:, :self.k - 1, :])
+            
+            off_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.n - self.k + 1))
+            off_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
+            off_mfld_pb_sizes = np.random.uniform(0, self.max_norm, size=(actual_chunk_size, num_offmfld_per_idx))
+            
+            if self.N <= 20000:
+                self.on_mfld_pb_sizes = on_mfld_pb_sizes
+                self.off_mfld_pb_sizes = off_mfld_pb_sizes
+
+            # the next line was giving an error in ipython for some reason. will take a closer look later
+            # hint: https://stackoverflow.com/questions/57507832/unable-to-allocate-array-with-shape-and-data-type
+            # off_mfld_pb = np.dot(off_mfld_pb_coeffs, all_tang_and_norms[:, self.k - 1:, :])
+
+            for j in range(actual_chunk_size):
+                on_mfld_pb[j] = np.dot(on_mfld_pb_coeffs[j], all_tang_and_norms[j, :self.k - 1, :])
+                off_mfld_pb[j] = np.dot(off_mfld_pb_coeffs[j], all_tang_and_norms[j, self.k - 1:, :])
+            
+            on_mfld_pb = on_mfld_pb * np.expand_dims(on_mfld_pb_sizes / np.linalg.norm(on_mfld_pb, axis=-1), axis=-1)
+            new_pocas_for_chunk = np.expand_dims(on_mfld_pts, axis=1) + on_mfld_pb
+
+            off_mfld_pb = off_mfld_pb * np.expand_dims(off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=-1), axis=-1)
+            off_mfld_pts_for_chunk = new_pocas_for_chunk + off_mfld_pb
+            
+            if self.N <= 20000:
+                self.on_mfld_pb = torch.from_numpy(on_mfld_pb)
+                self.off_mfld_pb = torch.from_numpy(off_mfld_pb)
+                self.off_mfld_pts_for_chunk = torch.from_numpy(off_mfld_pts_for_chunk)
+
+            indices_to_use = sum([[((j) * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
+            # logger.info("indices_to_use: {}".format(indices_to_use[:10]))
+            assert len(indices_to_use) == np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            total_num_neg_made += np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            off_mfld_pts = off_mfld_pts_for_chunk.reshape(-1, self.n)[indices_to_use]
+            off_mfld_dists = off_mfld_pb_sizes.reshape(-1)[indices_to_use]
+
+            pre_image_idx = np.array(sum([[0 if j < self.S1.genattrs.N - self.S1.genattrs.num_neg else 1 for k in range(self.poca_idx_counts[j])] for j in range(i, min(i+pp_chunk_size, self.num_pos))], []))
+            assert len(pre_image_idx) == np.sum(self.poca_idx_counts[i:min(i+pp_chunk_size, self.num_pos)])
+            
+            S1_off_mfld_offset = np.count_nonzero(pre_image_idx == 0)
+            self.all_points[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset] = off_mfld_pts[pre_image_idx == 0] 
+            self.all_actual_distances[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset, 0] = off_mfld_dists[pre_image_idx == 0]
+            self.all_actual_distances[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset, 1] = self.M
+            self.class_labels[S1_off_mfld_idx:S1_off_mfld_idx+S1_off_mfld_offset] = 2
+            S1_off_mfld_idx += S1_off_mfld_offset
+
+            S2_off_mfld_offset = np.count_nonzero(pre_image_idx == 1)
+            self.all_points[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = off_mfld_pts[pre_image_idx == 1] 
+            self.all_actual_distances[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset, 1] = off_mfld_dists[pre_image_idx == 1]
+            self.all_actual_distances[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset, 0] = self.M
+            self.class_labels[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = 2
+            S2_off_mfld_idx += S2_off_mfld_offset
+            
+
+        # for on-manifold points
+        self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 1] = self.M
+        self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 0] = self.M
+        assert S1_off_mfld_idx == self.S1.genattrs.num_neg
+        assert S2_off_mfld_idx - self.S1.genattrs.N == self.S2.genattrs.num_neg
+        assert total_num_neg_made == self.num_neg
+
+    def compute_inferred_points(self):
+
+        self._inf_setup()
+        logger.info("initial setup complete")
+
+        # print("after tn", self.nn_indices)
+        if not self.online:
+            self.make_inferred_off_mfld2(pp_chunk_size=5000)
+
+            num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+            self.all_points[self.S1.genattrs.num_neg:self.S1.genattrs.N, :self.k] = self.on_mfld_pts_k_[:num_on_mfld_S1]
+            self.all_points[self.S1.genattrs.N+self.S2.genattrs.num_neg:, :self.k] = self.on_mfld_pts_k_[num_on_mfld_S1:]
+
+            self.class_labels[self.S1.genattrs.num_neg:self.S1.genattrs.N] = 0
+            self.class_labels[self.S1.genattrs.N+self.S2.genattrs.num_neg:] = 1
+
+            assert (self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 0] == 0).all()
+            assert (self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 1] == 0).all()
+            assert (self.class_labels[:self.S1.genattrs.num_neg] == 2).all()
+            assert (self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg] == 2).all(), np.unique(self.class_labels[self.S1.genattrs.N:self.S1.genattrs.N + self.S2.genattrs.num_neg], return_counts=True)
+
+            if self.all_distances is None:
+                self.all_distances = self.all_actual_distances.copy()
+                self.all_distances[self.all_distances >= self.D] = self.D
+
+            self.all_points_trivial_ = None
+            self.all_points_tr_ = None
+            self.all_points_rot_ = None
+            if self.N < 1e+7:
+                self.all_points_tr_ = self.all_points + self.translation
+                self.all_points_rot_ = np.dot(self.rotation, self.all_points_tr_.T).T
+                self.all_points_trivial_ = self.all_points.copy()
+                self.all_points = self.all_points_rot_
+            else:
+                self.all_points += self.translation
+                self.all_points = np.dot(self.rotation, self.all_points.T).T
+                
+        else:
+            # TODO: implement online sampling of off-manifold points from induced manifold
+            pass
+
+        # self.all_distances = torch.from_numpy(self.all_distances).float()
+        self.all_points_trivial_ = torch.from_numpy(self.all_points_trivial_).float()
+        self.all_points_tr_ = torch.from_numpy(self.all_points_tr_).float()
+        self.all_points_rot_ = torch.from_numpy(self.all_points_rot_).float()
+
+
+
+
     def __len__(self):
-        return self.all_points.shape[0]
+        return self.normed_all_points.shape[0]
 
     def __getitem__(self, idx):
-        return {
-            "points": self.all_points[idx],
-            "distances": self.all_distances[idx],
-            "actual_distances": self.all_actual_distances[idx],
-            "normed_points": self.normed_all_points[idx],
-            "normed_distances": self.normed_all_distances[idx],
-            "normed_actual_distances": self.normed_all_actual_distances[idx],
-            "classes": self.class_labels[idx]
+        item_attr_map = {
+            "points": "all_points",
+            "distances": "all_distances",
+            "actual_distances": "all_actual_distances",
+            "smooth_distances": "all_smooth_distances",
+            "normed_smooth_distances": "normed_smooth_distances",
+            "normed_points": "normed_all_points",
+            "normed_distances": "normed_all_distances",
+            "normed_actual_distances": "normed_all_actual_distances",
+            "pre_classes": "pre_class_labels",
+            "classes": "class_labels"
         }
+
+        batch = dict()
+        for attr in item_attr_map:
+            if hasattr(self, item_attr_map[attr]) and getattr(self, item_attr_map[attr]) is not None:
+                batch[attr] = getattr(self, item_attr_map[attr])[idx]
+
+        # if self.pre_class_labels is not None:
+        #     batch["pre_classes"] = self.pre_class_labels[idx]
+        # if self.all_smooth_distances is not None:
+        #     batch["smooth_distances"] = self.all_smooth_distances[idx]
+        # if self.normed_all_smooth_distances is not None:
+        #     batch["normed_smooth_distances"] = self.normed_all_smooth_distances[idx]
+
+        return batch
 
     def norm(self):
         """normalise points and distances so that the whole setup lies in a unit sphere"""
@@ -380,6 +773,9 @@ class IntertwinedSwissRolls(Dataset):
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
         self.normed_all_actual_distances = self.all_actual_distances / self.norm_factor
+        
+        self.normed_all_actual_distances[:self.S1.genattrs.N, 1] = self.M
+        self.normed_all_actual_distances[self.S1.genattrs.N:, 0] = self.M 
 
         self.S1.genattrs.normed_points_n = self.normed_all_points[:self._N//2]
         self.S1.genattrs.normed_distances = self.normed_all_distances[:self._N//2]
@@ -484,7 +880,7 @@ class IntertwinedSwissRolls(Dataset):
             if attr in ["S1", "S2"]:
                 continue
             if not isinstance(attr_set[attr], Iterable):
-                if attr in ["g", "d_g", "g_contract", "dg_contract"]:
+                if attr in ["g", "d_g", "g_contract", "dg_contract"] or "nn" in attr:
                     continue
                 specs_attrs[attr] = attr_set[attr]
                 
@@ -607,5 +1003,47 @@ class IntertwinedSwissRolls(Dataset):
 
 
 
+def _get_tn_for_on_mfld_idx(idx,nbhr_local_coords, k, \
+     tang_dset_per_dir_size=None, norm_dset_per_dir_size=None, tang_dir=None, norm_dir=None, return_dirs=True):
+    """compute tangential and normal directions for all on-manifold points"""
+    # print("nbhr_local_coords", nbhr_local_coords.shape)
+    pca = PCA(n_components=k-1) # manifold is (k-1) dim so tangent space should be same
+    pca.fit(nbhr_local_coords)
 
+    tangential_dirs = pca.components_
+    normal_dirs = spla.null_space(tangential_dirs).T
+
+    # if (k == 500 or k == 50) and idx < 50:
+    #     # assert normal_dirs.shape[0] == 1
+    #     true_normal_dir = on_mfld_pt / np.linalg.norm(on_mfld_pt, ord=2)
+    #     est_normal_dir = normal_dirs[0] / np.linalg.norm(normal_dirs[0], ord=2)
+    #     dot_prod = np.dot(true_normal_dir, est_normal_dir)
+    #     torch.save({"on_mfld_pt": on_mfld_pt, "nbhr_local_coords": nbhr_local_coords, "true_normal_dir": true_normal_dir, "est_normal_dir": est_normal_dir, "dot_prod": dot_prod}, "/data/tmp/{}.pth".format(idx))
+
+
+    # print("tangent", tangential_dirs.shape)
+    # print("normal", normal_dirs.shape)
+
+    # tangential_dirs = np.ones((k - 1, 500))
+    # normal_dirs = np.ones((500 - k + 1, 500))
+
+    if tang_dir is not None and tang_dset_per_dir_size is not None:
+        cur_tang_dir_idx = idx // tang_dset_per_dir_size
+        cur_tang_dir_name = os.path.join(tang_dir, str(cur_tang_dir_idx))
+        os.makedirs(cur_tang_dir_name, exist_ok=True)
+        tang_fn = os.path.join(cur_tang_dir_name, str(idx) + ".pth")
+        torch.save(tangential_dirs, tang_fn)
+
+    if norm_dir is not None and norm_dset_per_dir_size is not None:
+        cur_norm_dir_idx = idx // norm_dset_per_dir_size
+        cur_norm_dir_name = os.path.join(norm_dir, str(cur_norm_dir_idx))
+        os.makedirs(cur_norm_dir_name, exist_ok=True)
+        norm_fn = os.path.join(cur_norm_dir_name, str(idx) + ".pth")
+        torch.save(normal_dirs, norm_fn)
+    # print(idx, tang_dset_per_dir_size, norm_dset_per_dir_size, cur_tang_dir_idx)
+    t_and_n = np.zeros((tangential_dirs.shape[1], tangential_dirs.shape[1]))
+    t_and_n[:k-1] = tangential_dirs
+    t_and_n[k-1:] = normal_dirs
+    if return_dirs: return t_and_n
+    # return (idx, tangential_dirs, normal_dirs)
     

@@ -10,11 +10,12 @@ from sacred import Ingredient
 from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, concentricspheres
 
-from data_configs import conc_spheres_cfg, sphere_cfg, ittw_swissrolls_cfg, synth_conc_spheres_cfg, inf_conc_spheres_cfg
+from data_configs import conc_spheres_cfg, inf_ittw_swissrolls_cfg, sphere_cfg, ittw_swissrolls_cfg, synth_conc_spheres_cfg, inf_conc_spheres_cfg
 
 DATA_CONFIGS = {
     "single-sphere": sphere_cfg,
     "ittw-swissrolls": ittw_swissrolls_cfg,
+    "inf-ittw-swissrolls": inf_ittw_swissrolls_cfg,
     "conc-spheres": conc_spheres_cfg,
     "synth-conc-spheres": synth_conc_spheres_cfg,
     "inf-conc-spheres": inf_conc_spheres_cfg
@@ -24,6 +25,7 @@ DATA_TYPE = {
     "single-sphere": sphere.RandomSphere,
     "single-swissroll": swissroll.RandomSwissRoll,
     "ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
+    "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
     "conc-spheres": concentricspheres.ConcentricSpheres,
     "synth-conc-spheres": concentricspheres.ConcentricSpheres,
     "inf-conc-spheres": concentricspheres.ConcentricSpheres
@@ -38,8 +40,8 @@ def data_cfg():
     # backup_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rf_expts/rdm_concspheres_test/" 
     # logdir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/" # high-level dump folder
     backup_dir = "/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex"
-    # logdir = "/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
-    logdir = "/data/t-achetan_2/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
+    logdir = "/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
+    # logdir = "/data/t-achetan_2/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test"
     data_tag = "rdm_swiss_rolls_k2n2" # low-level data directory name
     data_dir = os.path.join(logdir, data_tag, "data") # complete data directory path
     data_params = DATA_CONFIGS[mtype]()

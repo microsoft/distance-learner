@@ -40,8 +40,8 @@ def synth_conc_spheres_cfg():
     train_cfg_dict = {
         "N": 6500000,
         "num_neg": 6000000,
-        "n": 50,
-        "k": 500,
+        "n": 500,
+        "k": 50,
         "r": 1.0,
         "g": 0.3,
         "D": 0.07,
@@ -189,6 +189,95 @@ def ittw_swissrolls_cfg():
     test_cfg = copy.deepcopy(train_cfg)
     test_cfg["N"] = 20000
     test_cfg["seed"] = 89
+
+    cfg = {
+        "train": train_cfg,
+        "val": val_cfg,
+        "test": test_cfg
+    }
+
+    return cfg
+
+def inf_ittw_swissrolls_cfg():
+
+    train_cfg = {
+        "N": 100000,
+        "num_neg": None,
+        "n": 2,
+        "k": 2,
+        "D": 0.4,
+        "max_norm": 0.4,
+        "contract": 1,
+        "mu": 0,
+        "sigma": 1,
+        "seed": 23,
+        "gamma": 0.5,
+        "t_min": 1.5,
+        "t_max": 4.5,
+        "num_turns": None,
+        "omega": np.pi,
+        "inferred": True,
+        "online": False,
+        "off_online": False,
+        "augment": False
+    }
+
+    val_cfg = copy.deepcopy(train_cfg)
+    val_cfg["N"] = 20000
+    val_cfg["seed"] = 101
+    val_cfg["num_neg"] = None
+    val_cfg["inferred"] = False
+
+    test_cfg = copy.deepcopy(train_cfg)
+    test_cfg["N"] = 20000
+    test_cfg["seed"] = 89
+    test_cfg["num_neg"] = None
+    test_cfg["inferred"] = False
+
+    cfg = {
+        "train": train_cfg,
+        "val": val_cfg,
+        "test": test_cfg
+    }
+
+    return cfg
+
+
+def inf_ittw_swissrolls_cfg2():
+
+    train_cfg = {
+        "N": 100000,
+        "num_neg": None,
+        "n": 2,
+        "k": 2,
+        "D": 20,
+        "max_norm": 40,
+        "contract": 100,
+        "mu": 0,
+        "sigma": 1,
+        "seed": 23,
+        "gamma": 0.5,
+        "t_min": 150,
+        "t_max": 450,
+        "num_turns": None,
+        "omega": np.pi * 0.01,
+        "inferred": True,
+        "online": False,
+        "off_online": False,
+        "augment": False
+    }
+
+    val_cfg = copy.deepcopy(train_cfg)
+    val_cfg["N"] = 20000
+    val_cfg["seed"] = 101
+    val_cfg["num_neg"] = None
+    val_cfg["inferred"] = False
+
+    test_cfg = copy.deepcopy(train_cfg)
+    test_cfg["N"] = 20000
+    test_cfg["seed"] = 89
+    test_cfg["num_neg"] = None
+    test_cfg["inferred"] = False
 
     cfg = {
         "train": train_cfg,

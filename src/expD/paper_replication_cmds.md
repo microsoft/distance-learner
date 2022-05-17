@@ -57,7 +57,7 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
 ```bash
 python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=False cuda=1 \
  data.mtype=conc-spheres batch_size=4096 \
- data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=7e-2 \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=1e-1 \
  data.data_params.train.k=50 \
  data.data_params.train.n=500 \
  data.data_params.train.r=1 \
@@ -102,9 +102,9 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
  data.data_params.test.off_online=False \
  data.data_params.test.augment=False \
  model.input_size=500 \
- data.generate=False \
+ data.generate=True \
  adv_train=True \
- adv_train_params.atk_eps=7e-2 \
+ adv_train_params.atk_eps=1e-1 \
  on_mfld_noise=0 \
  test_off_mfld=False \
  task=clf
@@ -112,26 +112,53 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
 
 ## Inferred Manifold commands
 
+### Concentric Spheres Dataset
+
 ```bash
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres \
- data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_inferred_maxtdelta_5e-3 \
- data.data_params.train.N=6500000 \
- data.data_params.train.num_neg=6000000 \
- data.data_params.train.k=50 \
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres \
+ data.data_tag=rdm_concspheres_k500n500_noninfdist_moreoffmfld_inferred_maxtdelta_1e-4 \
+ data.data_params.train.N=2500000 \
+ data.data_params.train.num_neg=2000000 \
+ data.data_params.train.k=500 \
  data.data_params.train.n=500 \
- data.data_params.train.max_t_delta=5e-3 \
+ data.data_params.train.max_t_delta=1e-4 \
+ data.data_params.train.max_norm=0.1 \
  data.data_params.val.N=200000 \
  data.data_params.val.num_neg=100000 \
- data.data_params.val.k=50 \
+ data.data_params.val.k=500 \
  data.data_params.val.n=500 \
+ data.data_params.val.max_norm=0.1 \
  data.data_params.test.N=200000 \
  data.data_params.test.num_neg=100000 \
- data.data_params.test.k=50 \
+ data.data_params.test.k=500 \
+ data.data_params.test.n=500 \
+ data.data_params.test.max_norm=0.1 \
+ model.input_size=500 \
+ data.generate=True \
+ task=regression
+```
+
+### Intertwined Swiss Rolls
+
+```bash
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
+ data.data_tag=rdm_swrolls_k2n500_noninfdist_moreoffmfld__bs4096_inferred_maxtdelta=1e=3 \
+ data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
+ data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
+ data.data_params.train.k=2 \
+ data.data_params.train.n=500 \
+ data.data_params.train.N=1050000 \
+ data.data_params.train.num_neg=1000000 \
+ data.data_params.val.k=2 \
+ data.data_params.val.n=500 \
+ data.data_params.test.k=2 \
  data.data_params.test.n=500 \
  model.input_size=500 \
  data.generate=True \
  task=regression
 ```
+
+
 
 ### for fast debugging
 ```bash
@@ -150,6 +177,32 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
  data.data_params.test.k=2 \
  data.data_params.test.n=2 \
  model.input_size=2 \
+ data.generate=True \
+ task=regression
+```
+
+### for reloading from checkpoint
+
+```bash
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=-1 warmup=-1 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_5e-3 \
+ data.data_params.train.N=6500000 \
+ data.data_params.train.num_neg=6000000 \
+ data.data_params.train.k=50 \
+ data.data_params.train.n=500 \
+ data.data_params.train.max_t_delta=0.5e-3 \
+ data.data_params.train.max_norm=0.14 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.num_neg=100000 \
+ data.data_params.val.k=50 \
+ data.data_params.val.n=500 \
+ data.data_params.val.max_norm=0.14 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.num_neg=100000 \
+ data.data_params.test.k=50 \
+ data.data_params.test.n=500 \
+ data.data_params.test.max_norm=0.14 \
+ model.input_size=500 \
  data.generate=True \
  task=regression
 ```

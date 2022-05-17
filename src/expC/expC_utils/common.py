@@ -80,8 +80,10 @@ def get_coplanar_kdim_samples(dataset):
     if isinstance(dataset, manifold.Manifold):
         return dataset.genattrs.points_k
 
+    if hasattr(dataset, "on_mfld_pts_k_") and dataset.on_mfld_pts_k_ is not None:
+        return dataset.on_mfld_pts_k_
+    
     return dataset.all_points_k
-
 
 
 

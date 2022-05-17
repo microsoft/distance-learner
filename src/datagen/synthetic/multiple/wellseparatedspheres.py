@@ -34,75 +34,13 @@ logger = init_logger(__name__)
 
 
 
-class ConcentricSpheres(Dataset):
+class WellSeparatedSpheres(Dataset):
 
-    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
-                sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
+    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=[5.0, 5.0], bp=[1.8, 1.8], M=50, mu=10,\
+                sigma=5, seed=[42, 43], r=[10, 10], x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
                 max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", **kwargs):
-        """
-        :param N: number of samples in the dataset
-        :type N: int
-        :param num_neg: number of off-manifold samples
-        :type num_neg: int
-        :param n: dim. of space where data is embedded
-        :type n: int
-        :param k: dim. of spehere (in reality sphere is the generated sphere is (k-1) dim.)
-        :type k: int
-        :param D: threshold applied on the distance function used for learning
-        :type D: float
-        :param max_norm: maximum distance upto which points can be generated
-        :type max_norm: float
-        :param bp: buffer point for distance
-        :type bp: float
-        :param M: distance value for far-off manifold
-        :type M: float
-        :param mu: mean of normal distribution from which we sample
-        :type mu: float
-        :param sigma: std. dev. of normal distribution from which we sample
-        :type sigma: float
-        :param seed: seed used for random generator
-        :type seed: int
-        :param r: radius of the inner sphere in the concentric sphere dataset
-        :type r: float
-        :param g: difference between radii of inner and outer spheres
-        :type g: float
-        :param x_ck: center of the sphere in k-dim. space
-        :type x_ck: numpy.array
-        :param rotation: rotation transform applied to the dataset
-        :type rotation: numpy.ndarray
-        :param translation: translation transform applied to the dataset
-        :type translation: numpy.array
-        :param normalize: whether to normalize the dataset or not
-        :type normalize: bool
-        :param norm_factor: normalization factor used for normalizing the dataset
-        :type norm_factor: float
-        :param gamma: conservative normalization factor used in normalization
-        :type gamma: float
-        :param anchor: anchor point used in normalization
-        :type anchor: numpy.array
-        :param online: whether to sample points on-the-fly
-        :type online: bool
-        :param off_online: whether only off-manifold samples should be sampled on-the-fly
-        :type off_online: bool
-        :param augment: whether to treat off-manifold points generated on-the-fly as augmentations
-        :type augment: bool
-        :param inferred: if True, then off-manifold points are generated from the inferred manifold
-        :type inferred: bool
-        :param nn: number of points to use for k_neighbors (default is `k-1`), when `inferred == True`
-        :type nn: int
-        :param buffer_nbhrs: buffer neighbors for reasons of PCA, when `inferred == True`
-        :type buffer_nbhrs: int
-        :param max_t_delta: maximum perturbation allowed in the tangential direction, when `inferred == True`
-        :type max_t_delta: float
-        :param recomp_tn: if True, then recompute tangents and normals for perturbed on-manifold points, when `inferred == True`
-        :type recomp_tn: bool
-        :param use_new_knn: if True, use .new_knn for tangent and normal recomputation, when `inferred == True`
-        :type use_new_knn: bool
-        :param cache_dir: directory to cache auxillary attributes in order to free RAM
-        :type cache_dir: str
-        """
 
         if seed is not None: seed_everything(seed)
 

@@ -13,14 +13,14 @@ def inpfn_config():
     #     "rdm_concspheres_k100n100_noninfdist": ["1", "2"],
     #     "rdm_concspheres_k500n500_noninfdist": ["1", "2"]
     # }
-    proj_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
+    proj_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
     settings_type = "dict"
-    settings_to_analyze = {
-        "rdm_concspheres_k50n500_noninfdist_moreoffmfld_bs4096_inferred_debug": ["1"]
-    }
-    # settings_to_analyze = [
-    #     "rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=8e-2/1"
-    # ]
+    # settings_to_analyze = {
+    #     "rdm_concspheres_k50n500_noninfdist_moreoffmfld_bs4096_inferred_debug": ["1"]
+    # }
+    settings_to_analyze = [
+        "rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=1e-1/1"
+    ]
     settings_fn = None
     if settings_fn is not None:
         with open(settings_fn) as f:

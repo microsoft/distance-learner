@@ -447,14 +447,14 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 plt.clf()
 
         check = last_best_epoch_loss is None or logs["val_loss"] < last_best_epoch_loss 
-        debug_check = epoch % 10 == 0
+        debug_check = epoch % 10 == 0 or epoch == num_epochs - 1
         stat = "val_loss"
         if task == "clf":
             check = last_best_epoch_loss is None or logs["val_f1"] > last_best_epoch_loss 
             stat = "val_f1"
             
         if check or debug_check:
-            last_best_epoch_loss = logs[stat]
+            if check: last_best_epoch_loss = logs[stat]
             dump = {
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
@@ -477,6 +477,8 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
                 torch.save(dump, os.path.join(model_dir, "ckpt" + ".pth"))
             if debug_check:
                 torch.save(dump, os.path.join(model_dir, "running_ckpt" + ".pth"))
+                if epoch > 950:
+                    torch.save(dump, os.path.join(model_dir, "running_ckpt_epoch_{}".format(epoch) + ".pth"))
 
         
         logs["lr"] = optimizer.param_groups[0]["lr"]
@@ -602,7 +604,7 @@ def test(model, dataloader, device, task="regression",\
             print(classification_report(all_targets.reshape(-1), y_pred))
         
         acc = accuracy_score(all_targets.reshape(-1), y_pred)
-        average = "binary" if model.output_size == 2 else "macro"
+        average = "binary" if model.output_size == 2 and np.unique(all_targets.numpy()).shape == 2 else "macro"
         f1 = f1_score(all_targets.reshape(-1), y_pred, average=average)
         
         if save_dir is not None:
