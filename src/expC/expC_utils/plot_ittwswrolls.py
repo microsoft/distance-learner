@@ -29,7 +29,7 @@ def make_plots(model, dataset, dump_dir, task="regression",\
             thresh = dataset.S1.genattrs.D / dataset.norm_factor
 
     points_k = get_coplanar_kdim_samples(dataset)
-    points_k_classes = dataset.class_labels
+    points_k_classes = dataset.class_labels[dataset.class_labels != 2]
     gen_kd_grid, gen_nd_grid = get_nplane_samples_for_kmfld(points_k, dataset, n, num_points)
     num_classes = model.output_size 
     dummy_labels = torch.from_numpy(np.zeros((num_points, num_classes))).float()

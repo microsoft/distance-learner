@@ -286,3 +286,99 @@ def inf_ittw_swissrolls_cfg2():
     }
 
     return cfg
+
+def inf_ws_spheres_cfg():
+
+    train_cfg_dict = {
+        "N": 20000,
+        "num_neg": 10000,
+        "n": 2,
+        "k": 2,
+        "r": [1.0, 1.0],
+        "D": 0.07,
+        "max_norm": 0.14,
+        "mu": 0,
+        "sigma": 1,
+        "seed": 23,
+        "normalize": True,
+        "norm_factor": 1,
+        "bp": 0.09,
+        "M": 1,
+        "inferred": True,
+        "online": False,
+        "off_online": False,
+        "augment": False,
+        "max_t_delta": 1e-3,
+        "recomp_tn": False,
+        "gamma": 0,
+        "c_dist": 2.5,
+        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+    }
+
+    val_cfg_dict = copy.deepcopy(train_cfg_dict)
+    val_cfg_dict["num_neg"] = None
+    val_cfg_dict["inferred"] = False
+    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["seed"] = 101
+
+    test_cfg_dict = copy.deepcopy(train_cfg_dict)
+    test_cfg_dict["num_neg"] = None
+    test_cfg_dict["inferred"] = False
+    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["seed"] = 89
+
+    cfg = {
+        "train": train_cfg_dict,
+        "val": val_cfg_dict,
+        "test": test_cfg_dict
+    }
+
+    return cfg
+
+def ws_spheres_cfg():
+
+    train_cfg_dict = {
+        "N": 20000,
+        "num_neg": 10000,
+        "n": 2,
+        "k": 2,
+        "r": [1.0, 1.0],
+        "D": 0.07,
+        "max_norm": 0.14,
+        "mu": 0,
+        "sigma": 1,
+        "seed": 23,
+        "normalize": True,
+        "norm_factor": 1,
+        "bp": 0.09,
+        "M": 1,
+        "inferred": False,
+        "online": False,
+        "off_online": False,
+        "augment": False,
+        "max_t_delta": None,
+        "recomp_tn": False,
+        "gamma": 0,
+        "c_dist": 2.5,
+        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+    }
+
+    val_cfg_dict = copy.deepcopy(train_cfg_dict)
+    val_cfg_dict["num_neg"] = None
+    val_cfg_dict["inferred"] = False
+    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["seed"] = 101
+
+    test_cfg_dict = copy.deepcopy(train_cfg_dict)
+    test_cfg_dict["num_neg"] = None
+    test_cfg_dict["inferred"] = False
+    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["seed"] = 89
+
+    cfg = {
+        "train": train_cfg_dict,
+        "val": val_cfg_dict,
+        "test": test_cfg_dict
+    }
+
+    return cfg
