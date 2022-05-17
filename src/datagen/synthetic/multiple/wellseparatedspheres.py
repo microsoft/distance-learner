@@ -1205,7 +1205,7 @@ class WellSeparatedSpheres(Dataset):
         if self.N < 1e+7:
             S1_dir = os.path.join(save_dir, "S1_dump")
             S2_dir = os.path.join(save_dir, "S2_dump")
-            old_S2_dir = os.path.join(save_dir, "old_S2_dump")
+            if self.old_S2 is not None: old_S2_dir = os.path.join(save_dir, "old_S2_dump")
 
         specs_fn = os.path.join(save_dir, "specs.json")
         data_fn = os.path.join(save_dir, "data.pkl")
@@ -1238,7 +1238,7 @@ class WellSeparatedSpheres(Dataset):
         if self.N < 1e+7:
             self.S1.save_data(S1_dir)
             self.S2.save_data(S2_dir)
-            self.old_S2.save_data(old_S2_dir)
+            if self.old_S2 is not None: self.old_S2.save_data(old_S2_dir)
 
     @classmethod
     def get_demo_cfg_dict(cls, N=2500000, n=500, k=2):

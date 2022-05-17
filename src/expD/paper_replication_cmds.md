@@ -162,11 +162,13 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
 
 ```bash
 /root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=1e-6 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ws-spheres \
- data.data_tag=rdm_wsspheres_k2n2_noninfdist_moreoffmfld_inferred_maxtdelta=1e=3 \
+ data.data_tag=rdm_wsspheres_k2n2_noninfdist_inferred_maxtdelta=1e=3 \
  data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_wsspheres_test \
  data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_wsspheres_test/VM4 \
  data.data_params.train.k=2 \
  data.data_params.train.n=2 \
+ data.data_params.train.N=100000 \
+ data.data_params.train.num_neg=50000 \
  data.data_params.val.k=2 \
  data.data_params.val.n=2 \
  data.data_params.test.k=2 \
