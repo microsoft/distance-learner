@@ -311,7 +311,7 @@ def inf_ws_spheres_cfg():
         "max_t_delta": 1e-3,
         "recomp_tn": False,
         "gamma": 0,
-        "c_dist": 1.3,
+        "c_dist": 2,
         "cache_dir": "/mnt/t-achetan/data_cache/train/"
     }
 
