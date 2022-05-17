@@ -302,7 +302,7 @@ class WellSeparatedSpheres(Dataset):
             self.all_actual_distances = np.zeros((self.N, 2))
         if self.all_points is None:
             self.all_points = np.zeros((self.N, self.n))
-        print("here1:", self.all_points.shape)
+        # print("here1:", self.all_points.shape)
         num_offmfld_per_idx = max(self.poca_idx_counts)
         total_num_neg_made = 0
         # print(num_offmfld_per_idx)
@@ -417,7 +417,7 @@ class WellSeparatedSpheres(Dataset):
             self.class_labels[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = 2
             S2_off_mfld_idx += S2_off_mfld_offset
             
-        print("here2", self.all_points.shape)
+        # print("here2", self.all_points.shape)
         # for on-manifold points
         self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 1] = self.M
         self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 0] = self.M
@@ -1020,7 +1020,7 @@ class WellSeparatedSpheres(Dataset):
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
         
-        if not resample: self._anchor = np.mean(self._x_cn.numpy(), axis=0) / self.norm_factor
+        if not resample: self._anchor = np.mean(self._x_cn, axis=0) / self.norm_factor
         
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
