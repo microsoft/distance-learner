@@ -357,7 +357,9 @@ def run_training(num_epochs, task, loss_func, lr, warmup,\
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler_params = {"warmup": warmup, "cooldown": cooldown}
-    lr_sched_factor = lambda epoch: epoch / (scheduler_params["warmup"]) if epoch <= scheduler_params["warmup"] else (1 if epoch > scheduler_params["warmup"] and epoch < scheduler_params["cooldown"] else max(0, 1 + (1 / (scheduler_params["cooldown"] - num_epochs)) * (epoch - scheduler_params["cooldown"])))
+    lr_sched_factor = lambda epoch: 1
+    if warmup != -1 and cooldown != -1:
+        lr_sched_factor = lambda epoch: epoch / (scheduler_params["warmup"]) if epoch <= scheduler_params["warmup"] else (1 if epoch > scheduler_params["warmup"] and epoch < scheduler_params["cooldown"] else max(0, 1 + (1 / (scheduler_params["cooldown"] - num_epochs)) * (epoch - scheduler_params["cooldown"])))
     
     scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_sched_factor)
 

@@ -83,6 +83,7 @@ def config(attack, input_files):
 
     batch_size = 512
     use_split = "test" # data split to generate perturbations from
+    ckpt_to_use = "best" # ["best", "last"]
 
     th_analyze = np.arange(1e-2, 1.6e-1, 1e-2) # if model is distance learner, then thresholds to analyse performance
     # th_analyze = np.array([1e-2])
@@ -92,7 +93,7 @@ def config(attack, input_files):
     clean = False
 
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
-    dump_dir = "/data/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
+    dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
 
 
@@ -104,12 +105,15 @@ def load_run_config(run_dir):
         run_config = json.load(f)
     return run_config
 
-def load_model_for_run(run_dir):
+
+def load_model_for_run(run_dir, ckpt_to_use):
     
     run_config = load_run_config(run_dir)
 
     # loading the model
     model_ckpt = os.path.join(run_dir, "models", "ckpt.pth")
+    if ckpt_to_use == "last":
+        model_ckpt = os.path.join(run_dir, "models", "running_ckpt.pth")
     model_params = run_config["model"]
     model_class_name = model_params["model_type"]
     model_class = lmd.model_type[model_class_name]
@@ -119,7 +123,7 @@ def load_model_for_run(run_dir):
     return model_fn
 
 @ex.capture
-def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, use_split="test"):
+def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, ckpt_to_use, use_split="test"):
 
     # loading the data
     mtype = run_config["data"]["mtype"]
@@ -142,7 +146,7 @@ def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, use_s
     return dataloaders
 
 @ex.capture
-def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, dataloaders=None):
+def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, ckpt_to_use, dataloaders=None):
     
     result_container = list()
 
@@ -151,7 +155,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     _log.info("working on: {}".format(run_dir))
 
     _log.info("loading model for run...")
-    model_fn = load_model_for_run(run_dir=run_dir)
+    model_fn = load_model_for_run(run_dir=run_dir, ckpt_to_use=ckpt_to_use)
     _log.info("model loaded")
     _log.info("loading config for run...")
     run_config = load_run_config(run_dir=run_dir)
@@ -224,7 +228,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
         
 
-        result_parent_dir = os.path.join(run_dir, "attack_perf")
+        result_parent_dir = os.path.join(run_dir, "attack_perf_{}".format(ckpt_to_use))
         # _log.info(result_tag)
         result_dir = make_new_res_dir(result_parent_dir, result_tag, True, True, atk_flavor, atk_routine, eps, eps_iter, nb_iter, norm, restarts, verbose)
         _log.info("perturbed ex will be dumped in: {}".format(result_dir))
@@ -614,7 +618,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     )
 
 @ex.capture
-def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log):
+def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dump_dir, _log, ckpt_to_use):
     
     sep_results_for_all_runs_dir = os.path.join(dump_dir, "all_attack_perfs")
     os.makedirs(sep_results_for_all_runs_dir, exist_ok=True)
@@ -637,7 +641,7 @@ def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dum
         run_task = run_config["task"]
         run_data_tag = run_config["data"]["data_tag"]
         run_id = os.path.basename(inp_dir)
-        run_result_tag = run_data_tag + "-" + run_id + "-" + run_task + ".json"
+        run_result_tag = run_data_tag + "-" + run_id + "-" + run_task + "_" + ckpt_to_use + ".json"
         result_for_run_fn = os.path.join(sep_results_for_all_runs_dir, run_result_tag)
         
         _log.info("saving result for run in: {}".format(result_for_run_fn))

@@ -13,8 +13,10 @@ import matplotlib.pyplot as plt
 import torch
 from torch.utils.data import Dataset
 
+from utils import *
 from .manifold import GeneralManifoldAttrs, SpecificManifoldAttrs, Manifold
 
+logger = init_logger(__name__)
 
 identity = 'lambda x: x'
 d_identity = 'lambda x: 1'
@@ -107,7 +109,7 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
         """helper function for managing input parameters"""
 
         if (self._t_max is not None) and (self._omega is not None) and (self._num_turns is not None):
-            # print(self._t_min, self._t_max, self._omega, self._num_turns)
+            # logger.info(self._t_min, self._t_max, self._omega, self._num_turns)
             assert self._num_turns == ((self._t_max - self._t_min) * self._omega) / (2 * np.pi), "`num_turns`, `t_max`, and `omega` are incompatible!"
             
         elif self._t_max is None:
@@ -120,14 +122,14 @@ class SpecificSwissRollAttrs(SpecificManifoldAttrs):
             self._num_turns = ((self._t_max - self._t_min) * self._omega) / (2 * np.pi)
         
         if self._num_turns < 1:
-            print("[RandomSwissRoll]: [warning] num_turns < 1, might not lead to meaningful dataset")
+            logger.info("[RandomSwissRoll]: [warning] num_turns < 1, might not lead to meaningful dataset")
             if self._correct:
-                print("[RandomSwissRoll]: [log] `correct` enabled, fixing things")
+                logger.info("[RandomSwissRoll]: [log] `correct` enabled, fixing things")
                 self._scale = self._omega / np.pi
                 self._t_min = self._t_min / self._scale
                 self._t_max = self._t_max / self._scale
-                print("[RandomSwissRoll]: [log] tried fixing: new values listed below")
-                print("[RandomSwissRoll]: [log]", "t_min:", self._t_min, "t_max:", self._t_max,\
+                logger.info("[RandomSwissRoll]: [log] tried fixing: new values listed below")
+                logger.info("[RandomSwissRoll]: [log]", "t_min:", self._t_min, "t_max:", self._t_max,\
                      "omega:", self._omega, "num_turns:", self._num_turns, "gap:", 2*np.pi/self._omega)
 
         self._gap = 2 * np.pi / self._omega
@@ -292,7 +294,7 @@ class RandomSwissRoll(Manifold, Dataset):
                  t_min=1.5, t_max=4.5, omega=np.pi, num_turns=None, noise=0,\
                  correct=True, scale=None, g=identity, d_g=d_identity, height=21, rotation=None,\
                  translation=None, normalize=True, norm_factor=None, gamma=0.5,\
-                 **kwargs):
+                 inferred=False, **kwargs):
         """constructor for class containing a random swiss roll"""
 
         self._genattrs = genattrs
@@ -302,7 +304,7 @@ class RandomSwissRoll(Manifold, Dataset):
             self._genattrs = GeneralManifoldAttrs(N=N, num_neg=num_neg,\
                  n=n, k=k, D=D, max_norm=max_norm, mu=mu, sigma=sigma,\
                  seed=seed, normalize=normalize, norm_factor=norm_factor,\
-                 gamma=gamma, rotation=rotation, translation=translation)
+                 gamma=gamma, rotation=rotation, translation=translation, inferred=inferred)
 
         if not isinstance(specattrs, SpecificSwissRollAttrs):
             self._specattrs = SpecificSwissRollAttrs(mu=self._genattrs.mu,\
@@ -540,22 +542,30 @@ class RandomSwissRoll(Manifold, Dataset):
     def compute_points(self):
         
         self._specattrs.setup()
-        print("[RandomSwissRoll]: swiss roll attribute setup done")
+        logger.info("[RandomSwissRoll]: swiss roll attribute setup done")
         self.gen_points()
-        print("[RandomSwissRoll]: generated points in k-dim")
-        self.gen_pre_images()
-        print("[RandomSwissRoll]: pre-images generated")
-        self.embed_in_n()
-        print("[RandomSwissRoll]: embedded the sphere in n-dim space")
-
-        self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
-        self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
-        self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float()
-        self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float()
+        logger.info("[RandomSwissRoll]: generated points in k-dim")
         
-        if self._genattrs.normalize:
-            self.norm()
-            print("[RandomSwissRoll]: normalization complete")
+        if not self.genattrs.inferred:    
+            self.gen_pre_images()
+            logger.info("[RandomSwissRoll]: pre-images generated")
+            self.embed_in_n()
+            logger.info("[RandomSwissRoll]: embedded the sphere in n-dim space")
+
+            self._genattrs.points_n = torch.from_numpy(self._genattrs.points_n).float()
+            self._genattrs.points_k = torch.from_numpy(self._genattrs.points_k).float()
+            self._genattrs.distances = torch.from_numpy(self._genattrs.distances).float()
+            self._genattrs.actual_distances = torch.from_numpy(self._genattrs.actual_distances).float()
+            
+            if self._genattrs.normalize:
+                self.norm()
+                logger.info("[RandomSwissRoll]: normalization complete")
+
+    def online_make_off_mfld_eg(self, online_pt):
+        return super().online_make_off_mfld_eg(online_pt)
+
+    def online_compute_normals(self):
+        return super().online_compute_normals()
 
     def viz_test(self, dimX=0, dimY=1, dimZ=2, num_pre_img=5):
         """
@@ -796,8 +806,8 @@ class RandomSwissRoll(Manifold, Dataset):
                 
             errors = np.abs(self._genattrs.actual_distances[idx].numpy().reshape(-1) - np.array(min_dist_vals))
             rel_errors = errors / self._genattrs.actual_distances[idx].numpy().reshape(-1)
-            print("absolute errors:", errors)
-            print("relative errors:", rel_errors)
+            logger.info("absolute errors:", errors)
+            logger.info("relative errors:", rel_errors)
             
         
     def load_data(self, dump_dir):
@@ -837,7 +847,8 @@ class RandomSwissRoll(Manifold, Dataset):
 
         for attr_set in [gen_attrs, swissroll_attrs]:
             for attr in attr_set:
-        
+                if "nn" in attr:
+                    continue
                 if not isinstance(attr_set[attr], Iterable):
                     if attr == "_g" or attr == "_d_g":
                         continue
