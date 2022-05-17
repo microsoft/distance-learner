@@ -141,10 +141,10 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
 ### Intertwined Swiss Rolls
 
 ```bash
-/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
  data.data_tag=rdm_swrolls_k2n500_noninfdist_moreoffmfld__bs4096_inferred_maxtdelta=1e=3 \
- data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
- data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
+ data.logdir=/mnt/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
+ data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test/VM4 \
  data.data_params.train.k=2 \
  data.data_params.train.n=500 \
  data.data_params.train.N=1050000 \

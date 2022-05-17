@@ -470,7 +470,7 @@ class IntertwinedSwissRolls(Dataset):
             self.norm()
             logger.info("[IntertwinedSwissRolls]: Overall noramalization done")
 
-        self.get_all_points_k()
+        # self.get_all_points_k()
 
     def _make_poca_idx(self):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
