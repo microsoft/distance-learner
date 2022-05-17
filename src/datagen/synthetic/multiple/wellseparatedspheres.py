@@ -1205,6 +1205,7 @@ class WellSeparatedSpheres(Dataset):
         if self.N < 1e+7:
             S1_dir = os.path.join(save_dir, "S1_dump")
             S2_dir = os.path.join(save_dir, "S2_dump")
+            old_S2_dir = os.path.join(save_dir, "old_S2_dump")
 
         specs_fn = os.path.join(save_dir, "specs.json")
         data_fn = os.path.join(save_dir, "data.pkl")
@@ -1215,7 +1216,7 @@ class WellSeparatedSpheres(Dataset):
         attr_set = vars(self)
         for attr in attr_set:
             # print("dumping this:", attr)
-            if attr in ["S1", "S2"] or "dset" in attr or "knn" in attr:
+            if attr in ["S1", "S2", "old_S2"] or "dset" in attr or "knn" in attr:
                 # S1 and S2 saved separately so need not be handled. dsets like
                 # tang_dset and norm_dset can be constructed at loading. need not be
                 # dumped
@@ -1237,6 +1238,7 @@ class WellSeparatedSpheres(Dataset):
         if self.N < 1e+7:
             self.S1.save_data(S1_dir)
             self.S2.save_data(S2_dir)
+            self.old_S2.save_data(old_S2_dir)
 
     @classmethod
     def get_demo_cfg_dict(cls, N=2500000, n=500, k=2):
