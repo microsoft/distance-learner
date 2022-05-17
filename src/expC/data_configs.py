@@ -294,9 +294,9 @@ def inf_ws_spheres_cfg():
         "num_neg": 10000,
         "n": 2,
         "k": 2,
-        "r": [1.0, 1.0],
-        "D": 0.07,
-        "max_norm": 0.14,
+        "r": [0.5, 0.5],
+        "D": 0.2,
+        "max_norm": 0.25,
         "mu": 0,
         "sigma": 1,
         "seed": 23,
@@ -311,7 +311,7 @@ def inf_ws_spheres_cfg():
         "max_t_delta": 1e-3,
         "recomp_tn": False,
         "gamma": 0,
-        "c_dist": 2.5,
+        "c_dist": 1.3,
         "cache_dir": "/mnt/t-achetan/data_cache/train/"
     }
 
