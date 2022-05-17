@@ -36,12 +36,19 @@ logger = init_logger(__name__)
 
 class WellSeparatedSpheres(Dataset):
 
-    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=[5.0, 5.0], bp=[1.8, 1.8], M=50, mu=10,\
-                sigma=5, seed=[42, 43], r=[10, 10], x_ck=None, rotation=None, translation=None,\
+    def __init__(self, N=1000, num_neg=None, n=100, k=2, D=2.0, max_norm=5.0, bp=1.8, M=50, mu=10,\
+                sigma=5, seed=42, r=[10, 10], x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
-                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", **kwargs):
-
+                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", c_dist=None, **kwargs):
+        """
+        :param translation: random translation vector of shape: (n,) [single used for both spheres]
+        :type translation: np.array 
+        :param rotation: random rotation transform of shape (2, n, n) [one for each sphere]
+        :type rotation: np.array 
+        :param c_dist: distance between the centres in n-D space
+        :type c_dist: float
+        """
         if seed is not None: seed_everything(seed)
 
         self._N = N
@@ -59,20 +66,21 @@ class WellSeparatedSpheres(Dataset):
         self._sigma = sigma
         self._seed = seed
         self._r = r
-        self._g = g
         self._online = online
         self._off_online = off_online
         self._augment = augment
         self._inferred = inferred
         self._x_ck = x_ck
-        if self._x_ck is None:
-            self._x_ck = np.random.normal(self._mu, self._sigma, self._k)
+        self._x_ck = np.random.normal(self._mu, self._sigma, (2, self._k))
+        self._c_dist = c_dist
+        
         self._x_cn = None
 
         self._rotation = rotation
         if self._rotation is None:
-            self._rotation = np.random.normal(self._mu, self._sigma, (self._n, self._n))
-            self._rotation = np.linalg.qr(self._rotation)[0]
+            self._rotation = np.random.normal(self._mu, self._sigma, (2, self._n, self._n))
+            for i in range(2):
+                self._rotation[i] = np.linalg.qr(self._rotation[i])[0]
         self._translation = translation
         if self._translation is None:
             self._translation = np.random.normal(self._mu, self._sigma, self._n)
@@ -90,6 +98,8 @@ class WellSeparatedSpheres(Dataset):
 
         self.S1 = None
         self.S2 = None
+        self.old_S2 = None
+        self.old_S2_data_attrs = None
 
         self.all_points_k = None
         self.all_points = None
@@ -107,6 +117,7 @@ class WellSeparatedSpheres(Dataset):
         self.gamma = gamma
         self.fix_center = None
 
+        
 
         ### only relevant when `self.inferred == True`###
 
@@ -185,6 +196,15 @@ class WellSeparatedSpheres(Dataset):
         self.on_mfld_pb_sizes = None
         self.off_mfld_pb_sizes = None
 
+    def _reposition_centres(self):
+        req_c_dist = (sum(self.r) + 2* (self.max_norm)) * 1.1
+        logger.info("[WellSeparatedSpheres]: req. distance between spheres = {}".format(req_c_dist))
+        req_c_dist = np.round(req_c_dist, 1)
+        logger.info("[WellSeparatedSpheres]: final distance between spheres = {}".format(req_c_dist))
+        new_S2_x_ck = np.random.normal(self.mu, self.sigma, self.k)
+        new_S2_x_ck = self.x_ck[0] + (req_c_dist * (new_S2_x_ck / np.linalg.norm(new_S2_x_ck, ord=2)))
+        self.x_ck[1] = new_S2_x_ck
+
     def _make_poca_idx(self):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
         self.poca_idx[:self.num_neg // 2] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, dtype=np.int64), size=self.S1.genattrs.num_neg, replace=True).astype(np.int64)
@@ -212,11 +232,12 @@ class WellSeparatedSpheres(Dataset):
     def _inf_setup(self):
         """setting up data for off manifold samples when computing inferred manifold"""
         self._make_poca_idx()
-        logger.info("[ConcentricSpheres]: made poca_idx")
+        logger.info("[WellSeparatedSpheres]: made poca_idx")
         self._collect_on_mfld_k()
-        logger.info("[ConcentricSpheres]: collect on-mfld k-dim points from both spheres")
-        self._x_cn = np.zeros(self.n)
-        self._x_cn[:self.k] = self.S1.specattrs.x_ck
+        logger.info("[WellSeparatedSpheres]: collect on-mfld k-dim points from both spheres")
+        self._x_cn = np.zeros((2, self.n))
+        self._x_cn[0, :self.k] = self.S1.specattrs.x_ck
+        self._x_cn[1, :self.k] = self.S2.specattrs.x_ck
         
 
     def find_knn(self, X, use_new=False):
@@ -225,7 +246,7 @@ class WellSeparatedSpheres(Dataset):
             if `use_new == True`, then use `self.new_knn` for computation
             that is trained on `self.new_poca`
         """
-        logger.info("[ConcentricSpheres]: use_new == {}".format(use_new))
+        logger.info("[WellSeparatedSpheres]: use_new == {}".format(use_new))
         if not use_new:
             
             if self.knn is None:
@@ -234,25 +255,25 @@ class WellSeparatedSpheres(Dataset):
                 if self.on_mfld_pts_trivial_ is None:
                     to_fit = np.zeros((self.N, self.n))
                     to_fit[:, self.k] = self.on_mfld_pts_k_
-                logger.info("[ConcentricSpheres]: fitting knn...")
+                logger.info("[WellSeparatedSpheres]: fitting knn...")
                 self.knn.fit(to_fit)
-                logger.info("[ConcentricSpheres]: knn fit done")
+                logger.info("[WellSeparatedSpheres]: knn fit done")
 
-            logger.info("[ConcentricSpheres]: predicting nbhrs...")
+            logger.info("[WellSeparatedSpheres]: predicting nbhrs...")
             distances, indices = self.knn.predict(X)
-            logger.info("[ConcentricSpheres]: prediction complete...")
+            logger.info("[WellSeparatedSpheres]: prediction complete...")
 
         else:
             if self.new_knn is None:
-                logger.info("[ConcentricSpheres]: new_knn is None. fitting now...")
+                logger.info("[WellSeparatedSpheres]: new_knn is None. fitting now...")
                 self.new_knn = FaissKNeighbors(k=self.nn + self.buf_nn)
-                logger.info("[ConcentricSpheres]: fitting new_knn...")
+                logger.info("[WellSeparatedSpheres]: fitting new_knn...")
                 self.new_knn.fit(self.new_poca_dset[:])
-                logger.info("[ConcentricSpheres]: new_knn fit done")
+                logger.info("[WellSeparatedSpheres]: new_knn fit done")
 
-            logger.info("[ConcentricSpheres]: predicting nbhrs...")
+            logger.info("[WellSeparatedSpheres]: predicting nbhrs...")
             distances, indices = self.new_knn.predict(X)
-            logger.info("[ConcentricSpheres]: prediction complete...")
+            logger.info("[WellSeparatedSpheres]: prediction complete...")
 
         return distances, indices
 
@@ -264,7 +285,7 @@ class WellSeparatedSpheres(Dataset):
         :param pp_chunk_size: chunk size for parallel processing
         """
         if self.nn_distances is None or self.nn_indices is None:
-            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
+            logger.info("[WellSeparatedSpheres]: knn not computed. computing now ...")
             X = None
             if self.on_mfld_pts_trivial_ is None:
                 X = np.zeros((self.N, self.n))
@@ -281,7 +302,7 @@ class WellSeparatedSpheres(Dataset):
             self.all_actual_distances = np.zeros((self.N, 2))
         if self.all_points is None:
             self.all_points = np.zeros((self.N, self.n))
-        
+        print("here1:", self.all_points.shape)
         num_offmfld_per_idx = max(self.poca_idx_counts)
         total_num_neg_made = 0
         # print(num_offmfld_per_idx)
@@ -396,7 +417,7 @@ class WellSeparatedSpheres(Dataset):
             self.class_labels[S2_off_mfld_idx:S2_off_mfld_idx+S2_off_mfld_offset] = 2
             S2_off_mfld_idx += S2_off_mfld_offset
             
-
+        print("here2", self.all_points.shape)
         # for on-manifold points
         self.all_actual_distances[self.S1.genattrs.num_neg:self.S1.genattrs.N, 1] = self.M
         self.all_actual_distances[self.S1.genattrs.N+self.S2.genattrs.num_neg:, 0] = self.M
@@ -412,7 +433,7 @@ class WellSeparatedSpheres(Dataset):
         """
 
         if self.nn_distances is None or self.nn_indices is None:
-            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
+            logger.info("[WellSeparatedSpheres]: knn not computed. computing now ...")
             X = None
             if self.on_mfld_pts_trivial_ is None:
                 X = np.zeros((self.N, self.n))
@@ -423,15 +444,15 @@ class WellSeparatedSpheres(Dataset):
 
 
         if os.path.exists(self.tang_dir):
-            logger.info("[ConcentricSpheres]: tang_dir already exists. removing and recreating...")
+            logger.info("[WellSeparatedSpheres]: tang_dir already exists. removing and recreating...")
             shutil.rmtree(self.tang_dir)
             os.makedirs(self.tang_dir)
-            logger.info("[ConcentricSpheres]: tang_dir recreated at: {}".format(self.tang_dir))
+            logger.info("[WellSeparatedSpheres]: tang_dir recreated at: {}".format(self.tang_dir))
         if os.path.exists(self.norm_dir):
-            logger.info("[ConcentricSpheres]: norm_dir already exists. removing and recreating...")
+            logger.info("[WellSeparatedSpheres]: norm_dir already exists. removing and recreating...")
             shutil.rmtree(self.norm_dir)
             os.makedirs(self.norm_dir)
-            logger.info("[ConcentricSpheres]: norm_dir recreated at: {}".format(self.norm_dir))
+            logger.info("[WellSeparatedSpheres]: norm_dir recreated at: {}".format(self.norm_dir))
 
 
         for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing T&N"):
@@ -523,15 +544,15 @@ class WellSeparatedSpheres(Dataset):
             if Y is None:
                 Y = np.zeros((self.N, self.n))
                 Y[:, self.k] = self.on_mfld_pts_k_
-            logger.info("[ConcentricSpheres]: knn not computed. computing now ...")
+            logger.info("[WellSeparatedSpheres]: knn not computed. computing now ...")
             self.nn_distances, self.nn_indices = self.find_knn(Y)
 
 
         if os.path.exists(self.new_poca_dir):
-            logger.info("[ConcentricSpheres]: new_poca_dir already exists. removing and recreating...")
+            logger.info("[WellSeparatedSpheres]: new_poca_dir already exists. removing and recreating...")
             shutil.rmtree(self.new_poca_dir)
             os.makedirs(self.new_poca_dir)
-            logger.info("[ConcentricSpheres]: recreated new_poca_dir at: {}".format(self.new_poca_dir))
+            logger.info("[WellSeparatedSpheres]: recreated new_poca_dir at: {}".format(self.new_poca_dir))
 
         for i in tqdm(range(0, self.num_neg, pp_chunk_size), desc="computing perturbed poca"):
             poca = self.poca[i:min(self.num_neg, i+pp_chunk_size)]
@@ -725,16 +746,22 @@ class WellSeparatedSpheres(Dataset):
             self.all_points_rot_ = None
             if self.N < 1e+7:
                 self.all_points_tr_ = self.all_points + self.translation
-                self.all_points_rot_ = np.dot(self.rotation, self.all_points_tr_.T).T
+                self.all_points_rot_ = np.zeros_like(self.all_points_tr_)
+                self.all_points_rot_[:self.S1.genattrs.N] = np.dot(self.rotation[0], self.all_points_tr_[:self.S1.genattrs.N].T).T
+                self.all_points_rot_[self.S1.genattrs.N:] = np.dot(self.rotation[1], self.all_points_tr_[self.S1.genattrs.N:].T).T
                 self.all_points_trivial_ = self.all_points.copy()
                 self.all_points = self.all_points_rot_
             else:
                 self.all_points += self.translation
-                self.all_points = np.dot(self.rotation, self.all_points.T).T
-                
+                self.all_points[:self.S1.genattrs.N] = np.dot(self.rotation[0], self.all_points[:self.S1.genattrs.N].T).T
+                self.all_points[self.S1.genattrs.N:] = np.dot(self.rotation[1], self.all_points[self.S1.genattrs.N:].T).T
+                # self.all_points = np.dot(self.rotation, self.all_points.T).T
             
-            self._x_cn += self.translation
-            self._x_cn = np.dot(self.rotation, self.x_cn)
+            for mfld_idx in range(self._x_cn.shape[0]):
+                self._x_cn[mfld_idx] += self.translation
+                self._x_cn[mfld_idx] = np.dot(self.rotation[mfld_idx], self.x_cn[mfld_idx])
+
+            self._reposition_spheres()
 
         else:
             # TODO: implement online sampling of off-manifold points from induced manifold
@@ -746,6 +773,7 @@ class WellSeparatedSpheres(Dataset):
         self.all_points_rot_ = torch.from_numpy(self.all_points_rot_).float()
         self._x_cn = torch.from_numpy(self._x_cn).float()
 
+
     def compute_points(self):
 
         tot_count_per_mfld = self._N // 2
@@ -756,30 +784,36 @@ class WellSeparatedSpheres(Dataset):
 
         s_gamma = 0.5 if self._gamma is 0 else self._gamma # gamma = 0 needed for concentric spheres but throws error with constituent spheres
         self.S1 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
-            k=self._k, r=self._r, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
-            seed=self._seed, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
+            k=self._k, r=self._r[0], D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
+            seed=self._seed, x_ck=self._x_ck[0], rotation=self._rotation[0], translation=self._translation,\
             normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
             off_online=self._off_online, augment=self._augment, inferred=self._inferred)
 
         self.S1.compute_points()
-        logger.info("[ConcentricSpheres]: Generated S1")
-        if not self.inferred: self._x_cn = self.S1.specattrs.x_cn
+        logger.info("[WellSeparatedSpheres]: Generated S1")
+        self._x_cn = np.zeros((2, self.n))
+        if not self.inferred: 
+            self._x_cn[0] = self.S1.specattrs.x_cn
         else:
-            self._x_cn = np.zeros(self.n)
-            self._x_cn[:self.k] = self.S1.specattrs.x_ck
+            self._x_cn[:, :self.k] = self._x_ck
 
         # `seed` is passed as `None` since we need not have same seed between the two spheres
         self.S2 = RandomSphere(N=tot_count_per_mfld, num_neg=neg_count_per_mfld, n=self._n,\
-            k=self._k, r=self._r + self._g, D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
-            seed=None, x_ck=self._x_ck, rotation=self._rotation, translation=self._translation,\
+            k=self._k, r=self._r[1], D=self._D, max_norm=self._max_norm, mu=self._mu, sigma=self._sigma,\
+            seed=None, x_ck=self._x_ck[1], rotation=self._rotation[1], translation=self._translation,\
             normalize=True, norm_factor=None, gamma=s_gamma, anchor=None, online=self._online, \
             off_online=self._off_online, augment=self._augment, inferred=self._inferred)
 
         self.S2.compute_points()
-        if not self.inferred: assert (self._x_cn == self.S2.specattrs.x_cn).all() == True
-        logger.info("[ConcentricSpheres]: Generated S2")
+        if not self.inferred:
+            self._x_cn[1] = self.S2.specattrs.x_cn
+            self._reposition_spheres()  
+
+        if not self.inferred: assert (self._x_cn[1] == self.S2.specattrs.x_cn).all() == True
+        logger.info("[WellSeparatedSpheres]: Generated S2")
 
         if not self.inferred:
+
             self.all_points = np.zeros((self.N, self.n))
             self.all_points[:self.S1.genattrs.N] = self.S1.genattrs.points_n.numpy()
             self.all_points[self.S1.genattrs.N:] = self.S2.genattrs.points_n.numpy()
@@ -824,6 +858,8 @@ class WellSeparatedSpheres(Dataset):
         else:
             self.compute_inferred_points()
 
+          
+
         self.all_points = torch.from_numpy(self.all_points).float()
         self.all_distances = torch.from_numpy(self.all_distances).float()
         self.all_actual_distances = torch.from_numpy(self.all_actual_distances).float()
@@ -837,28 +873,70 @@ class WellSeparatedSpheres(Dataset):
 
         if self._normalize:
             self.norm()
-            logger.info("[ConcentricSpheres]: Overall noramalization done")
+            logger.info("[WellSeparatedSpheres]: Overall noramalization done")
 
         
         
         # self.get_all_points_k()
 
+    def _reposition_spheres(self):
+        """repositions S2 so that the 2 spheres are not extremely far apart"""
+        req_c_dist = self.c_dist    
+        if self.c_dist is None:
+            logger.info("[WellSeparatedSpheres]: no c_dist given. using heuristics...")
+            req_c_dist = (sum(self.r) + 2*self.max_norm) * 1.1
+            self._c_dist = req_c_dist
+            logger.info("[WellSeparatedSpheres]: setting c_dist := {}".format(self.c_dist))
+        
+        logger.info("[WellSeparatedSpheres]: using c_dist = {}".format(self.c_dist))
+        shifting_vec = np.random.normal(self.mu, self.sigma, self.n)
+        shifting_vec = self.c_dist * (shifting_vec / np.linalg.norm(shifting_vec, ord=2))
+        shifting_vec = shifting_vec + self.x_cn[0]
+
+        if not self.inferred:
+            
+            logger.info("[WellSeparatedSpheres]: re-positioning S2")
+            if self.N <= 1e+7:
+                self.old_S2 = copy.deepcopy(self.S2)
+            self.S2.genattrs.points_n -= self.S2.specattrs.x_cn
+            self.S2.genattrs.points_n += shifting_vec
+            self.S2.specattrs.x_cn = shifting_vec
+
+        else:
+            """
+            if working with inferred manifold then S2 only contains points_k.
+            re-positioning is done entirely within the concentric spheres class
+            """
+            logger.info("[WellSeparatedSpheres]: re-positioning n-dim points of S2")
+            if self.N <= 1e+7:
+                self.old_S2_data_attrs = {
+                    "x_cn": self._x_cn[1],
+                    "all_points": self.all_points
+                }
+            # print(self.all_points.shape)
+            self.all_points[self.S1.genattrs.N:] -= self.x_cn[1]
+            self.all_points[self.S1.genattrs.N:] += shifting_vec
+
+        self._x_cn[1] = shifting_vec
+        # print(self._x_cn)
+        logger.info("[WellSeparatedSpheres]: S2 re-positioned")    
+
     def resample_points(self, seed=42, no_op=False):
         if no_op:
             return None
         if seed is None:
-            logger.info("[ConcentricSpheres]: No seed provided. proceeding with current seed")
+            logger.info("[WellSeparatedSpheres]: No seed provided. proceeding with current seed")
         else:
-            logger.info("[ConcentricSpheres]: Re-sampling points with seed={}".format(seed))
+            logger.info("[WellSeparatedSpheres]: Re-sampling points with seed={}".format(seed))
             seed_everything(seed)
         
-        logger.info("[ConcentricSpheres]: Starting re-sampling from S1")
+        logger.info("[WellSeparatedSpheres]: Starting re-sampling from S1")
         self.S1.resample_points()
-        logger.info("[ConcentricSpheres]: Re-sampling from S1 done")
+        logger.info("[WellSeparatedSpheres]: Re-sampling from S1 done")
 
-        logger.info("[ConcentricSpheres]: Starting re-sampling from S2")
+        logger.info("[WellSeparatedSpheres]: Starting re-sampling from S2")
         self.S2.resample_points()
-        logger.info("[ConcentricSpheres]: Re-sampling from S2 done")
+        logger.info("[WellSeparatedSpheres]: Re-sampling from S2 done")
 
         self.all_points = np.vstack((self.S1.genattrs.points_n.numpy(), self.S2.genattrs.points_n.numpy()))
         
@@ -905,7 +983,7 @@ class WellSeparatedSpheres(Dataset):
 
         if self._normalize:
             self.norm(resample=True)
-            logger.info("[ConcentricSpheres]: Re-sampling noramalization done")
+            logger.info("[WellSeparatedSpheres]: Re-sampling noramalization done")
 
         self.get_all_points_k()
 
@@ -942,7 +1020,7 @@ class WellSeparatedSpheres(Dataset):
             # min_coord = torch.min(self.all_points).item()
             # max_coord = torch.max(self.all_points).item()
         
-        if not resample: self._anchor = self._x_cn / self.norm_factor
+        if not resample: self._anchor = np.mean(self._x_cn.numpy(), axis=0) / self.norm_factor
         
         self.normed_all_points = self.all_points / self.norm_factor
         self.normed_all_distances = self.all_distances / self.norm_factor
@@ -1047,7 +1125,7 @@ class WellSeparatedSpheres(Dataset):
                     data_attr = None
                     if os.path.exists(attrs[attr]["path"]):
                         data_attr = torch.load(attrs[attr]["path"])
-                        logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
+                        logger.info("[WellSeparatedSpheres]: data attribute ({}) loaded from file: {}".format(attr, attrs[attr]["path"]))
                     else:
                         
                         data_fn = os.path.basename(attrs[attr]["path"])
@@ -1056,7 +1134,7 @@ class WellSeparatedSpheres(Dataset):
                         # logger.info("data_fn: {}".format(data_fn))
                         # logger.info("data_fn_split: {}".format(data_fn_split))
                         data_attr = torch.load(path)
-                        logger.info("[ConcentricSpheres]: data attribute ({}) loaded from file: {}".format(attr, path))
+                        logger.info("[WellSeparatedSpheres]: data attribute ({}) loaded from file: {}".format(attr, path))
                     setattr(self, attr, data_attr)
                 else:
                     setattr(self, attr, attrs[attr])
@@ -1106,7 +1184,7 @@ class WellSeparatedSpheres(Dataset):
         
         if self.N >= 1e+7:
             ## Saving cache dir was taking a ton of memory (of the order of 800 GBs for N=1e+7)
-            logger.info("[ConcentricSpheres]: deleting cache before saving...")
+            logger.info("[WellSeparatedSpheres]: deleting cache before saving...")
             shutil.rmtree(self.cache_dir)
             self._cache_dir = None
             self.tang_dir = None
@@ -1147,7 +1225,7 @@ class WellSeparatedSpheres(Dataset):
             else:
                 attr_fn = os.path.join(save_dir, attr + ".pkl")
                 torch.save(attr_set[attr], attr_fn)
-                logger.info("[ConcentricSpheres]: data attribute ({}) saved to: {}".format(attr, attr_fn))
+                logger.info("[WellSeparatedSpheres]: data attribute ({}) saved to: {}".format(attr, attr_fn))
                 data_attrs[attr] = {"is_data_attr": True, "path": attr_fn}
 
         with open(specs_fn, "w+") as f:
@@ -1200,17 +1278,17 @@ class WellSeparatedSpheres(Dataset):
     @classmethod
     def make_train_val_test_splits(cls, cfg_dict=None, save_dir=None):
 
-        logger.info("[ConcentricSpheres]: starting with split generation")
+        logger.info("[WellSeparatedSpheres]: starting with split generation")
         if cfg_dict is None:
             cfg_dict = cls.get_demo_cfg_dict()
 
-        logger.info("[ConcentricSpheres]: generating train set...")
+        logger.info("[WellSeparatedSpheres]: generating train set...")
         train_cfg = cfg_dict["train"]
         train_set = cls(**train_cfg)
         train_set.compute_points()
-        logger.info("[ConcentricSpheres]: train set generation done!")
+        logger.info("[WellSeparatedSpheres]: train set generation done!")
 
-        logger.info("[ConcentricSpheres]: generating val set...")
+        logger.info("[WellSeparatedSpheres]: generating val set...")
         val_cfg = cfg_dict["val"]
         val_cfg["rotation"] = train_set.rotation
         val_cfg["translation"] = train_set.translation
@@ -1218,9 +1296,9 @@ class WellSeparatedSpheres(Dataset):
         val_cfg["norm_factor"] = train_set.norm_factor
         val_set = cls(**val_cfg)
         val_set.compute_points()
-        logger.info("[ConcentricSpheres]: val set generation done!")
+        logger.info("[WellSeparatedSpheres]: val set generation done!")
 
-        logger.info("[ConcentricSpheres]: generating test set...")
+        logger.info("[WellSeparatedSpheres]: generating test set...")
         test_cfg = cfg_dict["test"]
         test_cfg["rotation"] = train_set.rotation
         test_cfg["translation"] = train_set.translation
@@ -1228,14 +1306,14 @@ class WellSeparatedSpheres(Dataset):
         test_cfg["norm_factor"] = train_set.norm_factor
         test_set = cls(**test_cfg)
         test_set.compute_points()
-        logger.info("[ConcentricSpheres]: test set generation done!")
+        logger.info("[WellSeparatedSpheres]: test set generation done!")
 
 
         if save_dir is not None:
-            logger.info("[ConcentricSpheres]: saving splits at: {}".format(save_dir))
+            logger.info("[WellSeparatedSpheres]: saving splits at: {}".format(save_dir))
             cls.save_splits(train_set, val_set, test_set, save_dir)
         
-        logger.info("[ConcentricSpheres]: generated splits!")
+        logger.info("[WellSeparatedSpheres]: generated splits!")
         return train_set, val_set, test_set
 
     @classmethod
@@ -1264,7 +1342,7 @@ class WellSeparatedSpheres(Dataset):
         try:
             train_set.load_data(train_dir)
         except:
-            logger.info("[ConcentricSpheres]: could not load train split!")
+            logger.info("[WellSeparatedSpheres]: could not load train split!")
             train_set = None
 
         val_dir = os.path.join(dump_dir, "val")
@@ -1551,6 +1629,14 @@ class WellSeparatedSpheres(Dataset):
     @uuid.setter
     def uuid(self, x):
         raise RuntimeError("cannot set `uuid` after instantiation!")
+
+    @property
+    def c_dist(self):
+        return self._c_dist
+
+    @c_dist.setter
+    def c_dist(self, x):
+        raise RuntimeError("cannot set `c_dist` after instantiation!")
 
     @property
     def poca(self, idx=None):
