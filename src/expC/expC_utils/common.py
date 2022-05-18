@@ -1,7 +1,6 @@
 import os
 import sys
 
-from synthetic.multiple import wellseparatedspheres
 sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../../')
 import json
@@ -66,7 +65,7 @@ def get_nplane_samples_for_kmfld(k_dim_samples, dataset, n=3, num_samples=50000)
     gen_nd_grid[:, :k] = gen_kd_grid
     gen_nd_grid = gen_nd_grid + accessor.translation
     rotation = accessor.rotation
-    if isinstance(accessor, wellseparatedspheres.WellSeparatedSpheres):
+    if len(accessor.rotation.shape) == 3 and accessor.rotation.shape[0] == 2:
         rotation = accessor.rotation[0]
     gen_nd_grid = np.dot(rotation, gen_nd_grid.T).T
     gen_nd_grid = gen_nd_grid / accessor.norm_factor
