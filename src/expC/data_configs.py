@@ -312,6 +312,7 @@ def inf_ws_spheres_cfg():
         "recomp_tn": False,
         "gamma": 0,
         "c_dist": 2.5,
+        "same_rot": False,
         "cache_dir": "/mnt/t-achetan/data_cache/train/"
     }
 
