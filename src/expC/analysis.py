@@ -49,7 +49,7 @@ def run_analysis(dump_dir, on="val", num_points=50000, thresh=None):
     data_set = val_set if on == "val" else test_set
 
     # plot figure 1
-    MFLD_VIZ_BY_TYPE[data_mfld_type].make_plots(model, val_set, dump_dir, task, num_points, thresh=thresh)
+    MFLD_VIZ_BY_TYPE[data_mfld_type].make_plots(model, data_set, dump_dir, task, num_points, thresh=thresh)
 
 if __name__ == '__main__':
     
