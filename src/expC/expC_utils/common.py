@@ -50,11 +50,21 @@ def get_nplane_samples_for_kmfld(k_dim_samples, dataset, n=3, num_samples=50000)
     if type(k_dim_samples) == torch.Tensor:
         k_dim_samples = k_dim_samples.numpy()
 
+    low = None
+    high = None
+    gen_kd_grid = None
 
-    low = (1 - np.sign(np.min(k_dim_samples)) * 0.1) * np.min(k_dim_samples) 
-    high = (1 + np.sign(np.max(k_dim_samples)) * 0.1) * np.max(k_dim_samples)
+    if dataset.rotation.shape[0] == 2:
+        x_min, x_max = np.min(k_dim_samples[:, 0]) * (1 - np.sign(np.min(k_dim_samples[:, 0])) * 0.1), np.max(k_dim_samples[:, 0]) * (1 + np.sign(np.max(k_dim_samples[:, 0])) * 0.1)
+        y_min, y_max = np.min(k_dim_samples[:, 1]) * (1 - np.sign(np.min(k_dim_samples[:, 1])) * 0.1), np.max(k_dim_samples[:, 1]) * (1 + np.sign(np.max(k_dim_samples[:, 1])) * 0.1)
+        low = np.array([x_min, y_min])
+        high = np.array([x_max, y_max])
+        gen_kd_grid = np.random.uniform(low, high, size=(num_samples, k))
+    else:
+        low = (1 - np.sign(np.min(k_dim_samples)) * 0.1) * np.min(k_dim_samples) 
+        high = (1 + np.sign(np.max(k_dim_samples)) * 0.1) * np.max(k_dim_samples)
 
-    gen_kd_grid = np.random.uniform(low, high, size=(num_samples, k))
+        gen_kd_grid = np.random.uniform(low, high, size=(num_samples, k))
 
     gen_nd_grid = np.zeros((num_samples, n))
 
