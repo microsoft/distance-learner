@@ -915,7 +915,7 @@ class WellSeparatedSpheres(Dataset):
             if self.N <= 1e+7:
                 self.old_S2_data_attrs = {
                     "x_cn": self._x_cn[1],
-                    "all_points": self.all_points
+                    "all_points": torch.from_numpy(self.all_points[self.S1.genattrs.N:])
                 }
             # print(self.all_points.shape)
             self.all_points[self.S1.genattrs.N:] -= self.x_cn[1]
