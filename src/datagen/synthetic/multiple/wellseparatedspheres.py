@@ -40,7 +40,7 @@ class WellSeparatedSpheres(Dataset):
                 sigma=5, seed=42, r=[10, 10], x_ck=None, rotation=None, translation=None,\
                 shifting_vec=None, normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
-                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", c_dist=None, **kwargs):
+                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", c_dist=None, same_rot=False, **kwargs):
         """
         :param translation: random translation vector of shape: (n,) [single used for both spheres]
         :type translation: np.array 
@@ -75,7 +75,7 @@ class WellSeparatedSpheres(Dataset):
             self._x_ck = np.random.normal(self._mu, self._sigma, (2, self._k))
 
         self._c_dist = c_dist
-        
+        self._same_rot = same_rot
         self._x_cn = None
 
         self._rotation = rotation
@@ -83,6 +83,9 @@ class WellSeparatedSpheres(Dataset):
             self._rotation = np.random.normal(self._mu, self._sigma, (2, self._n, self._n))
             for i in range(2):
                 self._rotation[i] = np.linalg.qr(self._rotation[i])[0]
+            if self._same_rot:
+                logger.info("[WellSeparatedSpheres]: setting same rotation transform")
+                self._rotation[1] = self._rotation[0]
         self._translation = translation
         if self._translation is None:
             self._translation = np.random.normal(self._mu, self._sigma, self._n)
@@ -1646,6 +1649,15 @@ class WellSeparatedSpheres(Dataset):
     @c_dist.setter
     def c_dist(self, x):
         raise RuntimeError("cannot set `c_dist` after instantiation!")
+
+    @property
+    def same_rot(self):
+        return self._same_rot
+
+    @same_rot.setter
+    def same_rot(self, x):
+        raise RuntimeError("cannot set `same_rot` after instantiation!")
+
 
     @property
     def poca(self, idx=None):
