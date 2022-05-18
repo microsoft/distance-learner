@@ -1,5 +1,6 @@
 import os
 import sys
+
 sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 import argparse
 
@@ -9,7 +10,7 @@ import torch
 from torch.utils.data import TensorDataset, Dataset, DataLoader
 
 from datagen.synthetic.single import sphere, swissroll
-from datagen.synthetic.multiple import intertwinedswissrolls
+from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspheres, concentricspheres
 
 from expC_utils.common import *
 from expC_utils import plot_ittwswrolls
@@ -18,13 +19,16 @@ MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,
     "single-swissroll": swissroll.RandomSwissRoll,
     "ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
-    "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls
-
+    "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
+    "inf-ws-spheres": wellseparatedspheres.WellSeparatedSpheres,
+    "inf-conc-spheres": concentricspheres.ConcentricSpheres
 }
 
 MFLD_VIZ_BY_TYPE = {
     "ittw-swissrolls": plot_ittwswrolls,
-    "inf-ittw-swissrolls": plot_ittwswrolls
+    "inf-ittw-swissrolls": plot_ittwswrolls,
+    "inf-ws-spheres": plot_ittwswrolls,
+    "inf-conc-spheres": plot_ittwswrolls
 
 }
 
