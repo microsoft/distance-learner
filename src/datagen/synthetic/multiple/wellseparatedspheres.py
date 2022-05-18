@@ -71,11 +71,14 @@ class WellSeparatedSpheres(Dataset):
         self._augment = augment
         self._inferred = inferred
         self._x_ck = x_ck
+        self._same_rot = same_rot
+        self._c_dist = c_dist
         if x_ck is None:
             self._x_ck = np.random.normal(self._mu, self._sigma, (2, self._k))
+            if same_rot:
+                self._reposition_centres()
 
-        self._c_dist = c_dist
-        self._same_rot = same_rot
+        
         self._x_cn = None
 
         self._rotation = rotation
@@ -202,9 +205,12 @@ class WellSeparatedSpheres(Dataset):
         self.off_mfld_pb_sizes = None
 
     def _reposition_centres(self):
-        req_c_dist = (sum(self.r) + 2* (self.max_norm)) * 1.1
-        logger.info("[WellSeparatedSpheres]: req. distance between spheres = {}".format(req_c_dist))
-        req_c_dist = np.round(req_c_dist, 1)
+        if self.c_dist is None:
+            req_c_dist = (sum(self.r) + 2* (self.max_norm)) * 1.1
+            logger.info("[WellSeparatedSpheres]: req. distance between spheres = {}".format(req_c_dist))
+            req_c_dist = np.round(req_c_dist, 1)
+        else:
+            req_c_dist = self.c_dist
         logger.info("[WellSeparatedSpheres]: final distance between spheres = {}".format(req_c_dist))
         new_S2_x_ck = np.random.normal(self.mu, self.sigma, self.k)
         new_S2_x_ck = self.x_ck[0] + (req_c_dist * (new_S2_x_ck / np.linalg.norm(new_S2_x_ck, ord=2)))
@@ -766,7 +772,8 @@ class WellSeparatedSpheres(Dataset):
                 self._x_cn[mfld_idx] += self.translation
                 self._x_cn[mfld_idx] = np.dot(self.rotation[mfld_idx], self.x_cn[mfld_idx])
             # print("before reposition x_cn:", self._x_cn)
-            self._reposition_spheres()
+            if not self.same_rot:
+                self._reposition_spheres()
 
         else:
             # TODO: implement online sampling of off-manifold points from induced manifold
@@ -812,7 +819,8 @@ class WellSeparatedSpheres(Dataset):
         self.S2.compute_points()
         if not self.inferred:
             self._x_cn[1] = self.S2.specattrs.x_cn
-            self._reposition_spheres()  
+            if not self.same_rot:
+                self._reposition_spheres()  
         # print("before compute x_cn:", self._x_cn)
         if not self.inferred: assert (self._x_cn[1] == self.S2.specattrs.x_cn).all() == True
         logger.info("[WellSeparatedSpheres]: Generated S2")
