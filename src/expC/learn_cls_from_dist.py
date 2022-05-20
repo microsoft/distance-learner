@@ -3,10 +3,13 @@ Explores various ways to classify points on spheres (or general manifold)
 using the distance learned in Experiment B (see: `learn_mfld_distance.py`)
 """
 
+from asyncio.log import logger
 from hashlib import new
 import os
 import re
 import sys
+
+
 sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
 import json
 import copy
@@ -62,6 +65,7 @@ from expB import learn_mfld_distance as lmd
 from model_ingredients import initialise_model, model_cfg, model_ingredient
 from data_ingredients import initialise_data, data_cfg, data_ingredient
 
+from utils import seed_everything
 
 # class DistanceBasedClf(object):
 #     """
@@ -215,7 +219,7 @@ def config(data, model):
     backup_dir = data["backup_dir"] # directory on HDD/remote server where you want to keep backup in background
 
     ex.observers.append(FileStorageObserver(run_dump_dir))
-
+    model_seed = None
 
 def make_dataloaders(train_set, val_set, test_set, batch_size, num_workers, train):
     shuffle = True if train else False
@@ -341,13 +345,15 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
 
 @ex.capture
 def run_training(num_epochs, task, loss_func, lr, warmup,\
-     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log, online, adv_train, adv_train_params):
+     cooldown, cuda, ftname, tgtname, name, save_dir, debug, _log, online, adv_train, adv_train_params, model_seed):
 
 
     device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
     
     datasets, dataloaders = data_setup()
-
+    if model_seed is not None:
+        seed_everything(model_seed)
+        logger.info("initialising model with seed: {}".format(model_seed))
     model, scheduler_state_dict, optimizer_state_dict = initialise_model()
     # print(model)
     loss_function = lmd.loss_funcs[loss_func]
