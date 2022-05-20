@@ -143,7 +143,7 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
 #### Distance Learner
 
 ```bash
-/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1e-6 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 model_seed=99567 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
  data.data_tag=rdm_swrolls_k2n50_noninfdist_moreoffmfld_inferred_maxtdelta=1e=3 \
  data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
  data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
@@ -190,29 +190,48 @@ python3 learn_cls_from_dist.py with num_epochs=1000 cooldown=700 lr=8e-5 debug=F
 
 #### Distance Learner
 
-
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False data.mtype=inf-ws-spheres tgtname=normed_actual_distances loss_func=std_mse \
+ data.data_tag=rdm_wsspheres_samerot_k2n500_noninfdist_moreoffmfld_inferred_maxtdelta=1e=3 \
+ data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_wsspheres_test \
+ data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_wsspheres_test/VM4 \
+ data.data_params.train.k=2 \
+ data.data_params.train.n=500 \
+ data.data_params.train.N=1050000 \
+ data.data_params.train.num_neg=1000000 \
+ data.data_params.train.same_rot=True \
+ data.data_params.val.k=2 \
+ data.data_params.val.n=500 \
+ data.data_params.val.same_rot=True \
+ data.data_params.test.k=2 \
+ data.data_params.test.n=500 \
+ data.data_params.test.same_rot=True \
+ model.input_size=500 \
+ data.generate=False \
+ task=regression
 
 
 
 #### Standard classifier
 ```bash
-/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False data.mtype=inf-ws-spheres \
- data.data_tag=rdm_wsspheres_samerot_k2n2_noninfdist_inferred_maxtdelta=1e=3 \
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-ws-spheres \
+ data.data_tag=rdm_wsspheres_samerot_k2n500_noninfdist_moreoffmfld_inferred_maxtdelta=1e=3 \
  data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_wsspheres_test \
  data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_wsspheres_test/VM4 \
  data.data_params.train.k=2 \
- data.data_params.train.n=2 \
- data.data_params.train.N=100000 \
- data.data_params.train.num_neg=50000 \
+ data.data_params.train.n=500 \
+ data.data_params.train.N=1050000 \
+ data.data_params.train.num_neg=1000000 \
  data.data_params.train.same_rot=True \
  data.data_params.val.k=2 \
- data.data_params.val.n=2 \
+ data.data_params.val.n=500 \
  data.data_params.val.same_rot=True \
  data.data_params.test.k=2 \
- data.data_params.test.n=2 \
+ data.data_params.test.n=500 \
  data.data_params.test.same_rot=True \
- model.input_size=2 \
+ model.input_size=500 \
  data.generate=False \
+ adv_train=True \
+ adv_train_params.atk_eps=8e-2 \
  on_mfld_noise=0 \
  test_off_mfld=False \
  task=clf
