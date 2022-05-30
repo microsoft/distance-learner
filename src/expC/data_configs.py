@@ -219,7 +219,9 @@ def inf_ittw_swissrolls_cfg():
         "inferred": True,
         "online": False,
         "off_online": False,
-        "augment": False
+        "augment": False,
+        "norm_factor": 1,
+        "gamma": 0
     }
 
     val_cfg = copy.deepcopy(train_cfg)
