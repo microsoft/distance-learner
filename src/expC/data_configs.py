@@ -206,7 +206,7 @@ def inf_ittw_swissrolls_cfg():
         "n": 2,
         "k": 2,
         "D": 0.2,
-        "max_norm": 0.35,
+        "max_norm": 0.4,
         "contract": 1,
         "mu": 0,
         "sigma": 1,
@@ -220,7 +220,6 @@ def inf_ittw_swissrolls_cfg():
         "online": False,
         "off_online": False,
         "augment": False,
-        "norm_factor": 1,
         "gamma": 0
     }
 
@@ -266,7 +265,8 @@ def inf_ittw_swissrolls_cfg2():
         "inferred": True,
         "online": False,
         "off_online": False,
-        "augment": False
+        "augment": False,
+        "gamma": 0
     }
 
     val_cfg = copy.deepcopy(train_cfg)
