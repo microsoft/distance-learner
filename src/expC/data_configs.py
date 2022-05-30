@@ -206,7 +206,7 @@ def inf_ittw_swissrolls_cfg():
         "n": 2,
         "k": 2,
         "D": 0.2,
-        "max_norm": 0.4,
+        "max_norm": 0.35,
         "contract": 1,
         "mu": 0,
         "sigma": 1,
