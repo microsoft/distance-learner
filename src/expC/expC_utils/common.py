@@ -20,8 +20,11 @@ def load_config(dump_dir):
         config_dict = json.load(f)
     return config_dict
 
-def load_model(dump_dir):
-    model_fn = os.path.join(dump_dir, "models", "ckpt.pth")
+def load_model(dump_dir, best=True):
+    prefix = ""
+    if not best:
+        prefix = "running_"
+    model_fn = os.path.join(dump_dir, "models", prefix + "ckpt.pth")
     config_dict = load_config(dump_dir)
 
     model_params = config_dict["model"]
