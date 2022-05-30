@@ -10,13 +10,14 @@ from sacred import Ingredient
 from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, concentricspheres, wellseparatedspheres
 
-from data_configs import conc_spheres_cfg, inf_ittw_swissrolls_cfg, inf_ws_spheres_cfg,\
+from data_configs import conc_spheres_cfg, inf_ittw_swissrolls_cfg, inf_ittw_swissrolls_cfg2, inf_ws_spheres_cfg,\
      sphere_cfg, ittw_swissrolls_cfg, synth_conc_spheres_cfg, inf_conc_spheres_cfg, ws_spheres_cfg
 
 DATA_CONFIGS = {
     "single-sphere": sphere_cfg,
     "ittw-swissrolls": ittw_swissrolls_cfg,
     "inf-ittw-swissrolls": inf_ittw_swissrolls_cfg,
+    "inf-ittw-swissrolls2": inf_ittw_swissrolls_cfg2,
     "conc-spheres": conc_spheres_cfg,
     "synth-conc-spheres": synth_conc_spheres_cfg,
     "inf-conc-spheres": inf_conc_spheres_cfg,
@@ -29,6 +30,7 @@ DATA_TYPE = {
     "single-swissroll": swissroll.RandomSwissRoll,
     "ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
     "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
+    "inf-ittw-swissrolls2": intertwinedswissrolls.IntertwinedSwissRolls,
     "conc-spheres": concentricspheres.ConcentricSpheres,
     "synth-conc-spheres": concentricspheres.ConcentricSpheres,
     "inf-conc-spheres": concentricspheres.ConcentricSpheres,
