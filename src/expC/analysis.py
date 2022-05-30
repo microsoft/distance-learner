@@ -20,6 +20,7 @@ MFLD_TYPES = {
     "single-swissroll": swissroll.RandomSwissRoll,
     "ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
     "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
+    "inf-ittw-swissrolls2": intertwinedswissrolls.IntertwinedSwissRolls,
     "inf-ws-spheres": wellseparatedspheres.WellSeparatedSpheres,
     "inf-conc-spheres": concentricspheres.ConcentricSpheres
 }
@@ -27,6 +28,7 @@ MFLD_TYPES = {
 MFLD_VIZ_BY_TYPE = {
     "ittw-swissrolls": plot_ittwswrolls,
     "inf-ittw-swissrolls": plot_ittwswrolls,
+    "inf-ittw-swissrolls2": plot_ittwswrolls,
     "inf-ws-spheres": plot_ittwswrolls,
     "inf-conc-spheres": plot_ittwswrolls
 
