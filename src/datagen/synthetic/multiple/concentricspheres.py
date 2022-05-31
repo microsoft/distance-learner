@@ -1,4 +1,3 @@
-from functools import partial
 import os
 import re
 import shutil
@@ -10,7 +9,7 @@ import time
 import random
 import inspect
 import multiprocessing
-from contextlib import closing
+from functools import partial
 from collections.abc import Iterable
 
 import numpy as np
