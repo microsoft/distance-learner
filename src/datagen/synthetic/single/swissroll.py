@@ -835,33 +835,34 @@ class RandomSwissRoll(Manifold, Dataset):
                     
 
     def save_data(self, save_dir):
-        os.makedirs(save_dir, exist_ok=True)
-        specs_fn = os.path.join(save_dir, "specs.json")
-        data_fn = os.path.join(save_dir, "data.pkl")
+        super().save_data(save_dir)
+        # os.makedirs(save_dir, exist_ok=True)
+        # specs_fn = os.path.join(save_dir, "specs.json")
+        # data_fn = os.path.join(save_dir, "data.pkl")
 
-        specs_attrs = dict()
-        data_attrs = dict()
+        # specs_attrs = dict()
+        # data_attrs = dict()
 
-        gen_attrs = vars(self._genattrs)
-        swissroll_attrs = vars(self._specattrs)
+        # gen_attrs = vars(self._genattrs)
+        # swissroll_attrs = vars(self._specattrs)
 
-        for attr_set in [gen_attrs, swissroll_attrs]:
-            for attr in attr_set:
-                if "nn" in attr:
-                    continue
-                if not isinstance(attr_set[attr], Iterable):
-                    if attr == "_g" or attr == "_d_g":
-                        continue
-                    specs_attrs[attr] = attr_set[attr]
+        # for attr_set in [gen_attrs, swissroll_attrs]:
+        #     for attr in attr_set:
+        #         if "nn" in attr:
+        #             continue
+        #         if not isinstance(attr_set[attr], Iterable):
+        #             if attr == "_g" or attr == "_d_g":
+        #                 continue
+        #             specs_attrs[attr] = attr_set[attr]
                     
-                        # specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
-                else:
-                    data_attrs[attr] = attr_set[attr]
+        #                 # specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
+        #         else:
+        #             data_attrs[attr] = attr_set[attr]
 
-        with open(specs_fn, "w+") as f:
-            json.dump(specs_attrs, f)
+        # with open(specs_fn, "w+") as f:
+        #     json.dump(specs_attrs, f)
 
-        torch.save(data_attrs, data_fn)
+        # torch.save(data_attrs, data_fn)
 
     @classmethod
     def save_splits(cls, train_set, val_set, test_set, save_dir):
