@@ -180,7 +180,10 @@ def ittw_swissrolls_cfg():
         "t_min": 150,
         "t_max": 450,
         "num_turns": None,
-        "omega": np.pi * 0.01
+        "omega": np.pi * 0.01,
+        "online": False,
+        "off_online": False,
+        "augment": False
     }
 
     val_cfg = copy.deepcopy(train_cfg)
