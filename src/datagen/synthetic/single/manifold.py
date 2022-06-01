@@ -563,6 +563,8 @@ class Manifold(ABC):
         for attr_set in [gen_attrs, specific_attrs]:
             for attr in attr_set:
                 if not isinstance(attr_set[attr], Iterable):
+                    if attr == "_g" or attr == "_d_g":
+                        continue
                     specs_attrs[attr] = attr_set[attr]
                 else:
                     attr_fn = os.path.join(save_dir, attr + ".pkl")
