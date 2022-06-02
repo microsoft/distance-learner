@@ -16,7 +16,7 @@ class FaissKNeighbors:
 
     def fit(self, X, y=None):
         self.index = faiss.IndexFlatL2(X.shape[1])
-        self.index.add(X.astype(np.float32))
+        self.index.add(np.array(X).astype(np.float32))
         self.res = faiss.StandardGpuResources()
 
         self.gpu_index = faiss.index_cpu_to_gpu(
@@ -27,7 +27,7 @@ class FaissKNeighbors:
         self.y = y
 
     def predict(self, X):
-        distances, indices = self.gpu_index.search(X.astype(np.float32), k=self.k)
+        distances, indices = self.gpu_index.search(np.array(X).astype(np.float32), k=self.k)
         votes = None
         if self.y is not None:
             votes = self.y[indices]
