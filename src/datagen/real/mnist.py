@@ -20,7 +20,7 @@ import scipy.linalg as spla
 
 import torch
 import torchvision
-from torch.data.utils import Dataset, Dataloader
+from torch.utils.data import Dataset, DataLoader
 
 from tqdm import tqdm
 
@@ -30,20 +30,23 @@ from .manifolds import RealWorldManifolds
 logger = init_logger(__name__)
 
 class MNISTManifolds(RealWorldManifolds, Dataset):
+    
+    load_all = True
 
     def __init__(
         self,
-        num_pos,
+        num_neg,
         on_mfld_path,
         k,
         n=784,
         use_labels=[1, 9],
         off_mfld_label=0,
+        seed=23,
         download=False,
         split="train",
         N=None,
-        num_neg=None,
         nn=30,
+        buf_nn=2,
         max_t_delta=1e-3,
         max_norm=1e-1,
         M=1.0,
@@ -51,12 +54,25 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         **kwargs):
 
         # MNIST is small. Always load entire data in memory
-        self._load_all = True
-
-        super.__init__(num_pos, on_mfld_path, k,\
-             n, use_labels, off_mfld_label, download,\
-             self._load_all, split, N, num_neg, nn, max_t_delta,\
-             max_norm, M, transform, **kwargs)
+        super().__init__(
+            num_neg, 
+            on_mfld_path,
+            k,
+            n,
+            use_labels, 
+            off_mfld_label,
+            seed=seed,
+            download=download,
+            load_all=True,
+            split=split,
+            N=N,
+            nn=nn,
+            buf_nn=buf_nn,
+            max_t_delta=max_t_delta,
+            max_norm=max_norm,
+            M=M,
+            transform=transform,
+            **kwargs)
 
         if self.transform is None:
             self.transform = torchvision.transforms.Compose([
@@ -70,19 +86,17 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         train = True if self.split == "train" else False
         logger.info("[{}]: loading MNIST dataset".format(self.__class__.__name__))
         dataset = torchvision.datasets.MNIST(self.on_mfld_path,\
-             train=train, download=self.download, transform=self.transform)
+             train=train, download=self._download, transform=self.transform)
         logger.info("[{}]: MNIST data loaded".format(self.__class__.__name__))
-
-        assert len(dataset) == self.num_pos, "num_pos ({}) value invalid. does not match dataset size ({})!".format(self.num_pos, len(dataset))
 
         tmp = torch.zeros(len(dataset), self.n)
         tmp_cls = torch.zeros(len(dataset)).long()
 
         batch_size = 8192
         num_workers = 8
-        dataloader = Dataloader(dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers)
+        dataloader = DataLoader(dataset, shuffle=False, batch_size=batch_size, num_workers=num_workers)
 
-        for idx, X, y in tqdm(enumerate(dataloader)):
+        for idx, (X, y) in tqdm(enumerate(dataloader), desc="flattening data"):
             tmp[idx*batch_size:(idx+1)*batch_size] = X.reshape(X.shape[0], -1)
             tmp_cls[idx*batch_size:(idx+1)*batch_size] = y.reshape(y.shape[0])
         
@@ -91,6 +105,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         dataset_flat = (tmp, tmp_cls)
 
         return dataset, dataset_flat
+
+    def _map_class_label_to_idx(self, class_labels):
+        return super()._map_class_label_to_idx(class_labels)
 
     def init_onmfld_pts(self, om_augs=None):
         return super().init_onmfld_pts(om_augs)
@@ -104,8 +121,8 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
     def make_inferred_off_mfld(self, pp_chunk_size=5000):
         return super().make_inferred_off_mfld(pp_chunk_size)
 
-    def compute_points(self, om_samples=None, om_class_labels=None):
-        return super().compute_points(om_samples, om_class_labels)
+    def compute_points(self, om_augs=None):
+        return super().compute_points(om_augs)
 
     def save_data(self, save_dir):
         return super().save_data(save_dir)
@@ -114,24 +131,23 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         return super().load_data(dump_dir)
 
     @classmethod
-    def get_demo_cfg_dict(cls, N=60000, num_neg=60000):
+    def get_demo_cfg_dict(cls, N=120000, num_neg=60000):
 
         strategy = "only"
         has_val = False
 
         train_cfg_dict = {
-            "num_pos": 60000,
             "on_mfld_path": "./mnist_data",
             "k": 25,
             "n": 784,
             "use_labels": [1, 8],
             "off_mfld_label": 9,
-            "load_all": True,
             "split": "train",
             "seed": 23,
             "N": N,
             "num_neg": num_neg,
             "nn": 50,
+            "buf_nn": 2,
             "max_t_delta": 1e-3,
             "max_norm": 1e-1,
             "M": 1.0,
@@ -168,3 +184,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
     @classmethod
     def load_splits(cls, dump_dir):
         return super().load_splits(dump_dir)
+
+    def __len__(self):
+        return super().__len__()
+
+    def __getitem__(self, idx):
+        return super().__getitem__(idx)
