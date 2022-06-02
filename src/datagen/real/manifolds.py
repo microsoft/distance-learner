@@ -46,7 +46,7 @@ class RealWorldManifolds(ABC):
 
     def __init__(
         self,
-        num_pos,
+        num_neg,
         on_mfld_path,
         k,
         n,
@@ -57,16 +57,16 @@ class RealWorldManifolds(ABC):
         load_all=True,
         split="train",
         N=None,
-        num_neg=None,
         nn=30,
+        buf_nn=2,
         max_t_delta=1e-3,
         max_norm=1e-1,
         M=1.0,
         transform=None,
         **kwargs):
         """
-        :param num_pos: number of on-manifold samples in the dataset
-        :type num_pos: int
+        :param num_neg: number of off-manifold examples
+        :type num_neg: int
         :param on_mfld_path: path to on-manifold samples
         :type on_mfld_path: str
         :param k: estimate of intrinsic data dimension
@@ -87,10 +87,10 @@ class RealWorldManifolds(ABC):
         :type split: str
         :param N: total number of samples (on + off manifold)
         :type N: int
-        :param num_neg: number of off-manifold examples
-        :type num_neg: int
         :param nn: number of nearest nbhrs to search for
         :type nn: int
+        :param buf_nn: number of buffer neighbors
+        :type buf_nn: int
         :param max_t_delta: maximum tangential perturbation
         :type max_t_delta: float
         :param max_norm: maximum normal perturbation
@@ -104,22 +104,23 @@ class RealWorldManifolds(ABC):
         self.seed = seed
         seed_everything(seed)
 
-        self.num_pos = num_pos
-        if N is None and num_neg is not None:
-            N = num_pos + num_neg
-        elif N is not None:
-            if num_neg is not None:
-                assert N == num_pos + num_neg, "incompatible values for `N`, `num_neg`, `num_pos`"
-            else:
-                num_neg = N - num_pos
-        else:
-            N = num_pos
-            num_neg = 0
+        # self.num_pos = num_pos
+        # if N is None and num_neg is not None:
+        #     N = num_pos + num_neg
+        # elif N is not None:
+        #     if num_neg is not None:
+        #         assert N == num_pos + num_neg, "incompatible values for `N`, `num_neg`, `num_pos`"
+        #     else:
+        #         num_neg = N - num_pos
+        # else:
+        #     N = num_pos
+        #     num_neg = 0
 
         self.N = N
         self.num_neg = num_neg
 
         self.nn = nn
+        self.buf_nn = buf_nn
         self.knn = None
 
         self.k = k
@@ -130,7 +131,8 @@ class RealWorldManifolds(ABC):
         self._download = download # don't want to expose this outside
         self.split = split
 
-        self.use_labels = use_labels
+        self.use_labels = np.array(use_labels)
+        self.class_to_idx = {self.use_labels[i]: i for i in range(len(self.use_labels))}
         self.off_mfld_label = off_mfld_label
         self.transform = transform
 
@@ -150,15 +152,21 @@ class RealWorldManifolds(ABC):
 
         self.on_mfld_pts = None
         self.on_mfld_class_labels = None
+        self.on_mfld_class_idx = None
         self.onmfld_class_label_counts = None
+        self.onmfld_class_idx_counts = None
 
         self.all_points = None
         self.all_actual_distances = None
         self.class_labels = None
-        self.pre_image_labels = None
+        self.class_idx = None
+        self.pre_class_labels = None
+        self.pre_class_idx = None
         
         self.poca_idx = None
         self.poca_idx_counts = None
+        self.nn_indices = None
+        self.nn_distances = None
 
     @abstractmethod
     def load_raw_om_data(self):
@@ -166,6 +174,14 @@ class RealWorldManifolds(ABC):
         raise NotImplementedError("""implement dataset-specific method\
              that returns a Pytorch dataset object and the same object\
              as a (Tensor, Tensor) object containing points and class labels""")
+
+    @abstractmethod
+    def _map_class_label_to_idx(self, class_labels):
+        # print("map class to idx 0", (class_labels.shape, self.use_labels[:, None].shape))
+        # print("map class to idx 1", (self.use_labels[:, None] == class_labels.numpy()))
+        # print("map class to idx 2", (self.use_labels[:, None] == class_labels.numpy()).argmax(axis=0))
+        
+        return torch.from_numpy((self.use_labels[:, None] == np.array(class_labels)).argmax(axis=0)).long()
 
     @abstractmethod
     def init_onmfld_pts(self, om_augs=None):
@@ -178,32 +194,71 @@ class RealWorldManifolds(ABC):
         # load dataset
         self.dataset, self.dataset_flat = self.load_raw_om_data()
 
+        # fiter dataset_flat to keep only labels in use_labels
+        use_flat_idx = np.isin(self.dataset_flat[1], self.use_labels)
+        tmp = self.dataset_flat[0][use_flat_idx].clone()
+        tmp_cls = self.dataset_flat[1][use_flat_idx].clone()
+        self.dataset_flat = (tmp, tmp_cls)
+
+        # set number of on-mfld, off-mfld (given as input) and total points
+        self.num_pos = np.sum(np.isin(self.dataset.targets, self.use_labels))
+        N = None
+        num_neg = self.num_neg
+        if N is None and num_neg is not None:
+            N = self.num_pos + num_neg
+        elif N is not None:
+            if num_neg is not None:
+                assert N == self.num_pos + num_neg, "incompatible values for `N`, `num_neg`, `num_pos`"
+            else:
+                num_neg = N - self.num_pos
+        else:
+            N = self.num_pos
+            num_neg = 0
+        self.N = N
+        self.num_neg = num_neg
+
+        assert self.N == self.num_pos + self.num_neg
+
         # load on-mfld pts
-        num_om_samples = len(self.dataset)
+        num_om_samples = self.num_pos
         if om_augs is not None:
+            use_om_augs = np.isin(om_augs[1], self.use_labels)
+            om_augs = (om_augs[0][use_om_augs], om_augs[1][use_om_augs])
             logger.info("[{}]: on-manifold augmentations provided...".format(self.__class__.__name__))
-            num_om_samples = len(self.dataset) + om_augs.shape[0]
-            logger.info("[{}]: size of on-mfld set = {}".format(self.__class__.__name__, num_om_samples))
+            num_om_samples = self.num_pos + om_augs[0].shape[0]
+            logger.info("[{}]: size of on-mfld set = {} (raw:{} + aug{})".format(self.__class__.__name__, num_om_samples, self.num_pos, om_augs[0].shape[0]))
 
 
         self.on_mfld_pts = torch.zeros(num_om_samples, self.n)
-        self.on_mfld_pts[:len(self.dataset)] = self.dataset_flat[0]
-        self.on_mfld_pts[len(self.dataset):] = om_augs[0]
+        self.on_mfld_pts[:self.num_pos, :] = self.dataset_flat[0]
         
         self.on_mfld_class_labels = torch.zeros(num_om_samples)
-        self.on_mfld_class_labels[:len(self.dataset)] = self.dataset_flat[1]
-        self.on_mfld_class_labels[len(self.dataset):] = om_augs[1]
+        self.on_mfld_class_labels[:self.num_pos] = self.dataset_flat[1]
+
+        if om_augs is not None:
+            self.on_mfld_pts[self.num_pos:] = om_augs[0]
+            self.on_mfld_class_labels[self.num_pos:] = om_augs[1]
+        
         self.on_mfld_class_labels = self.on_mfld_class_labels.long()
 
         use_idx = np.isin(self.on_mfld_class_labels, self.use_labels)
         self.on_mfld_pts = self.on_mfld_pts[use_idx]
         self.on_mfld_class_labels = self.on_mfld_class_labels[use_idx]
 
+        self.on_mfld_class_idx = self._map_class_label_to_idx(self.on_mfld_class_labels)
+        self.on_mfld_class_idx = self.on_mfld_class_idx.long()
+
         # populate class_label_counts
         tmp = np.unique(self.on_mfld_class_labels, return_counts=True)
         self.onmfld_class_label_counts = dict()
         for i in range(len(tmp[0])):
-            self.onmfld_class_label_counts[tmp[0][i]] = self.onmfld_class_label_counts[tmp[1][i]]
+            self.onmfld_class_label_counts[tmp[0][i]] = tmp[1][i]
+
+        # populate class_idx_counts
+        tmp = np.unique(self.on_mfld_class_idx, return_counts=True)
+        self.onmfld_class_idx_counts = dict()
+        for i in range(len(tmp[0])):
+            self.onmfld_class_idx_counts[tmp[0][i]] = tmp[1][i]
 
     
     @abstractmethod
@@ -229,14 +284,27 @@ class RealWorldManifolds(ABC):
     def make_poca_idx(self):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
         end_idx = 0
-        for i in range(self.use_labels):
-            self.poca_idx[end_idx:end_idx+self._num_offmfld_by_class[i]] = np.random.choice(np.where(self.class_labels == self.use_labels[i]), size=self._num_offmfld_by_class[i], replace=True).astype(np.int64)
+        for i in range(len(self.use_labels)):
+            print(np.where(self.dataset_flat[1] == self.use_labels[i]))
+            self.poca_idx[end_idx:end_idx+self._num_offmfld_by_class[i]] = np.random.choice(np.where(self.dataset_flat[1] == self.use_labels[i])[0], size=self._num_offmfld_by_class[i], replace=True).astype(np.int64)
             end_idx += self._num_offmfld_by_class[i]
         assert end_idx == self.num_neg
+        self.uniq_poca_idx = np.unique(self.poca_idx)
+        print("uniq_poca_idx", self.uniq_poca_idx, self.uniq_poca_idx.shape)
+        self.poca_idx_counts = np.zeros(self.uniq_poca_idx.shape[0], dtype=np.int64)
         tmp = np.unique(self.poca_idx, return_counts=True)
-        self.poca_idx_counts[tmp[0]] = tmp[1]
+        self.poca_idx_counts[np.where(tmp[0] == self.uniq_poca_idx)[0]] = tmp[1]
+        # self.poca_idx_counts[tmp[0]] = tmp[1]
 
     def make_inferred_off_mfld(self, pp_chunk_size=5000):
+        """
+        Note: while kNN prediction is done over all on-mfld points 
+        (which would include on-manifold augmentations), the off-mfld
+        generation is done only over first `num_pos` on-mfld points
+        which only consists of the actual on-manifold points of the dataset
+        and not augmentations
+        """
+
 
         if self.nn_distances is None or self.nn_indices is None:
             logger.info("[{}]: knn not computed. computing now ...".format(self.__class__.__name__))
@@ -251,23 +319,44 @@ class RealWorldManifolds(ABC):
         if self.class_labels is None:
             self.class_labels = np.zeros(self.N).astype(np.int64)
 
-        if self.pre_image_labels is None:
-            self.pre_image_labels = np.zeros(self.N).astype(np.int64)
+        if self.class_idx is None:
+            self.class_idx = np.zeros(self.N).astype(np.int64)
+
+        if self.pre_class_labels is None:
+            self.pre_class_labels = np.zeros(self.N).astype(np.int64)
+
+        if self.pre_class_idx is None:
+            self.pre_class_idx = np.zeros(self.N).astype(np.int64)
         
         num_offmfld_per_idx = max(self.poca_idx_counts)
         total_num_neg_made = 0
 
-        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing off mfld (2)"):
+        uniq_poca_idx = np.where(self.poca_idx_counts != 0)[0]
 
-            nbhr_indices = self.nn_indices[i:min(self.num_pos, i+pp_chunk_size)]
-            mask = np.equal(nbhr_indices, np.arange(i, min(self.num_pos, i+pp_chunk_size)).reshape(-1, 1))
+        for i in tqdm(range(0, len(uniq_poca_idx), pp_chunk_size), desc="computing off mfld (2)"):
+            
+            actual_chunk_size = min(pp_chunk_size, len(uniq_poca_idx) - i)
+
+            poca_idx = uniq_poca_idx[i:i+actual_chunk_size]
+
+            # nbhr_indices = self.nn_indices[i:min(self.num_pos, i+pp_chunk_size)]
+            nbhr_indices = self.nn_indices[poca_idx]
+
+            # mask = np.equal(nbhr_indices, np.arange(i, min(self.num_pos, i+pp_chunk_size)).reshape(-1, 1))
+            mask = np.equal(nbhr_indices, poca_idx.reshape(-1, 1))
+
             mask[mask.sum(axis=1) == 0, -1] = True
             nbhr_indices = nbhr_indices[~mask].reshape(nbhr_indices.shape[0], nbhr_indices.shape[1] - 1).astype(np.int64)
 
-            on_mfld_pts = self.on_mfld_pts[i:min(self.num_pos, i+pp_chunk_size)]
-            nbhrs = self.on_mfld_pts[nbhr_indices]
+            # on_mfld_pts = self.on_mfld_pts[i:min(self.num_pos, i+pp_chunk_size)].numpy()
+            # nbhrs = self.on_mfld_pts[nbhr_indices].numpy()
+            on_mfld_pts = self.on_mfld_pts[poca_idx].numpy()
+            print(nbhr_indices, self.on_mfld_pts.shape)
+            nbhrs = self.on_mfld_pts.numpy()[nbhr_indices]
 
+            # print(nbhrs.shape)
             nbhr_local_coords = (nbhrs.transpose(1, 0, 2) - on_mfld_pts).transpose(1, 0, 2)
+            # nbhr_local_coords = torch.from_numpy(nbhr_local_coords)
 
             _get_tn_for_on_mfld_idx_partial = partial(_get_tn_for_on_mfld_idx, \
                 k=self.k,
@@ -278,7 +367,8 @@ class RealWorldManifolds(ABC):
                 all_tang_and_norms = pool.starmap(
                     _get_tn_for_on_mfld_idx_partial, 
                     zip(
-                        range(i, int(min(i + pp_chunk_size, self.num_pos))),
+                        # range(i, int(min(i + pp_chunk_size, self.num_pos))),
+                        poca_idx,
                         nbhr_local_coords
                         )
                     )
@@ -287,7 +377,8 @@ class RealWorldManifolds(ABC):
             if self.N <= 20000:
                 self.all_tang_and_norms = all_tang_and_norms
 
-            actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
+            # actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
+            
             on_mfld_pb_coeffs = np.random.normal(size=(actual_chunk_size, num_offmfld_per_idx, self.k - 1))
             on_mfld_pb = np.zeros((actual_chunk_size, num_offmfld_per_idx, self.n))
             on_mfld_pb_sizes = np.random.uniform(0, self.max_t_delta, size=(actual_chunk_size, num_offmfld_per_idx))
@@ -309,6 +400,10 @@ class RealWorldManifolds(ABC):
 
             off_mfld_pb = off_mfld_pb * np.expand_dims(off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=-1), axis=-1)
             off_mfld_pts_for_chunk = new_pocas_for_chunk + off_mfld_pb
+            indices_to_use = sum([[(j * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
+            print(num_offmfld_per_idx, indices_to_use, self.poca_idx_counts)
+            off_mfld_pts = off_mfld_pts_for_chunk.reshape(actual_chunk_size, -1)[indices_to_use]
+            off_mfld_dists = off_mfld_pb_sizes.reshape(actual_chunk_size)[indices_to_use]
 
             if self.N <= 20000:
                 self.on_mfld_pb = torch.from_numpy(on_mfld_pb)
@@ -317,11 +412,24 @@ class RealWorldManifolds(ABC):
 
             total_num_neg_made += off_mfld_pts_for_chunk.shape[0]
             
-            self.all_points[i:min(self.num_pos, i+pp_chunk_size)] = off_mfld_pts_for_chunk
-            self.pre_image_labels[i:min(self.num_pos, i+pp_chunk_size)] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
-            self.class_labels[i:min(self.num_pos, i+pp_chunk_size)] = self.off_mfld_label
-            self.all_actual_distances[i:min(self.num_pos, i+pp_chunk_size), :] = self.M
-            self.all_actual_distances[np.arange(i, min(self.num_pos, i+pp_chunk_size)), self.class_labels[i:min(self.num_pos, i+pp_chunk_size)]] = off_mfld_pb_sizes
+            assert (i + actual_chunk_size) <= self.num_neg, "generated number of points ({}) exceeding `num_neg` ({})".format(i + actual_chunk_size, self.num_neg)
+            self.all_points[i:i+actual_chunk_size] = off_mfld_pts
+            self.pre_class_labels[i:i+actual_chunk_size] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
+            self.pre_class_idx[i:i+actual_chunk_size] = self._map_class_label_to_idx(self.pre_class_labels[i:i+actual_chunk_size])
+            print(self.pre_class_idx)
+
+            self.class_labels[i:i+actual_chunk_size] = self.off_mfld_label
+            self.class_idx[i:i+actual_chunk_size] = len(self.use_labels)
+            self.all_actual_distances[i:i+actual_chunk_size, :] = self.M
+            self.all_actual_distances[np.arange(i, i+actual_chunk_size), self.pre_class_idx[i:i+actual_chunk_size]] = off_mfld_dists
+            # self.all_actual_distances[np.arange(i, i+actual_chunk_size), self.pre_class_labels[i:i+actual_chunk_size]] = off_mfld_dists
+
+
+            # self.all_points[i:min(self.num_pos, i+pp_chunk_size)] = off_mfld_pts_for_chunk
+            # self.pre_class_labels[i:min(self.num_pos, i+pp_chunk_size)] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
+            # self.class_labels[i:min(self.num_pos, i+pp_chunk_size)] = self.off_mfld_label
+            # self.all_actual_distances[i:min(self.num_pos, i+pp_chunk_size), :] = self.M
+            # self.all_actual_distances[np.arange(i, min(self.num_pos, i+pp_chunk_size)), self.class_labels[i:min(self.num_pos, i+pp_chunk_size)]] = off_mfld_pb_sizes
 
         assert total_num_neg_made == self.num_neg
 
@@ -336,6 +444,10 @@ class RealWorldManifolds(ABC):
         self.init_onmfld_pts(om_augs=om_augs)
         logger.info("[{}]: initialised on-mfld points".format(self.__class__.__name__))
 
+        # make poca_idx
+        self.make_poca_idx()
+        logger.info("[{}]: created poca idx".format(self.__class__.__name__))
+
          # make off manifold points
         self.make_inferred_off_mfld(pp_chunk_size=5000)
         logger.info("[{}]: completed off-mfld generation".format(self.__class__.__name__))
@@ -343,15 +455,19 @@ class RealWorldManifolds(ABC):
         # filling on-mfld points in the main container
         if om_augs is None:
             self.all_points[self.num_neg:] = self.on_mfld_pts
-            self.pre_image_labels[self.num_neg:] = self.on_mfld_class_labels
+            self.pre_class_labels[self.num_neg:] = self.on_mfld_class_labels
+            self.pre_class_idx[self.num_neg:] = self._map_class_label_to_idx(self.pre_class_labels[self.num_neg:])
             self.class_labels[self.num_neg:] = self.on_mfld_class_labels
+            self.class_idx[self.num_neg:] = self.pre_class_idx[self.num_neg:]
         else:
             self.all_points[self.num_neg:] = self.dataset_flat[0]
-            self.pre_image_labels[self.num_neg:] = self.dataset_flat[1]
+            self.pre_class_labels[self.num_neg:] = self.dataset_flat[1]
+            self.pre_class_idx[self.num_neg:] = self._map_class_label_to_idx(self.dataset_flat[1])
             self.class_labels[self.num_neg:] = self.dataset_flat[1]
+            self.class_idx[self.num_neg:] = self.pre_class_idx[self.num_neg:]
                
         self.all_actual_distances[self.num_neg:, :] = self.M
-        self.all_actual_distances[np.arange(self.num_neg, self.N), self.class_labels[self.num_neg:]] = 0
+        self.all_actual_distances[np.arange(self.num_neg, self.N), self.pre_class_idx[self.num_neg:]] = 0
 
     @abstractmethod
     def save_data(self, save_dir):
@@ -411,13 +527,13 @@ class RealWorldManifolds(ABC):
 
         self.dataset, self.dataset_flat = self.load_raw_om_data()
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def get_demo_cfg_dict(cls):
         raise NotImplementedError()
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def make_train_val_test_splits(cls, cfg_dict=None, save_dir=None):
     
         logger.info("[{}]: starting with split generation".format(cls.__name__))
@@ -470,9 +586,8 @@ class RealWorldManifolds(ABC):
         logger.info("[{}]: generated splits!".format(cls.__name__))
         return train_set, val_set, test_set
 
-
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def save_splits(cls, train_set, val_set, test_set, save_dir):
         train_dir = os.path.join(save_dir, "train")
         val_dir = os.path.join(save_dir, "val")
@@ -488,8 +603,8 @@ class RealWorldManifolds(ABC):
 
         return train_set, val_set, test_set
 
-    @abstractmethod
     @classmethod
+    @abstractmethod
     def load_splits(cls, dump_dir):
         train_dir = os.path.join(dump_dir, "train")
         os.makedirs(train_dir, exist_ok=True)
@@ -512,6 +627,26 @@ class RealWorldManifolds(ABC):
         test_set.load_data(test_dir)
 
         return train_set, val_set, test_set
+
+    @abstractmethod
+    def __len__(self):
+        return self.N
+
+    @abstractmethod
+    def __getitem__(self, idx):
+        item_attr_map = {
+            "points": "all_points",
+            "actual_distances": "all_actual_distances",
+            "pre_classes": "pre_class_labels",
+            "classes": "class_labels"
+        }
+
+        batch = dict()
+        for attr in item_attr_map:
+            if hasattr(self, item_attr_map[attr]) and getattr(self, item_attr_map[attr]) is not None:
+                batch[attr] = getattr(self, item_attr_map[attr])[idx]
+
+        return batch
 
 
 
@@ -550,5 +685,7 @@ def _get_tn_for_on_mfld_idx(
     t_and_n[:k-1] = tangential_dirs
     t_and_n[k-1:] = normal_dirs
     if return_dirs: return t_and_n
+
+
 
     
