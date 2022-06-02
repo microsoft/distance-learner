@@ -366,7 +366,7 @@ class RealWorldManifolds(ABC):
         attr_set = vars(self)
         for attr in attr_set:
 
-            if attr in ["dataset", "on_mfld_pts", "on_mfld_class_labels"]:
+            if attr in ["dataset", "dataset_flat"]:
                 continue
             
             if (type(attr_set[attr]) == str) or not isinstance(attr_set[attr], Iterable):
@@ -396,7 +396,7 @@ class RealWorldManifolds(ABC):
 
         attr_set = vars(self)
         for attr in attr_set:
-            if attr in ["dataset", "on_mfld_pts", "on_mfld_class_labels"]:
+            if attr in ["dataset", "dataset_flat"]:
                 continue
             if attr in attrs:
                 if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
@@ -409,7 +409,7 @@ class RealWorldManifolds(ABC):
                 else:
                     setattr(self, attr, attrs[attr])
 
-        self.init_onmfld_pts()
+        self.dataset, self.dataset_flat = self.load_raw_om_data()
 
     @abstractmethod
     @classmethod

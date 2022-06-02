@@ -114,7 +114,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         return super().load_data(dump_dir)
 
     @classmethod
-    def get_demo_cfg_dict(cls):
+    def get_demo_cfg_dict(cls, N=60000, num_neg=60000):
 
         strategy = "only"
         has_val = False
@@ -129,8 +129,8 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             "load_all": True,
             "split": "train",
             "seed": 23,
-            "N": 6060000,
-            "num_neg": 6000000,
+            "N": N,
+            "num_neg": num_neg,
             "nn": 50,
             "max_t_delta": 1e-3,
             "max_norm": 1e-1,
