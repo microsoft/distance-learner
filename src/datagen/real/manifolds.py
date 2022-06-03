@@ -118,6 +118,7 @@ class RealWorldManifolds(ABC):
 
         self.N = N
         self.num_neg = num_neg
+        self.num_pos = None
 
         self.nn = nn
         self.buf_nn = buf_nn
@@ -201,7 +202,7 @@ class RealWorldManifolds(ABC):
         self.dataset_flat = (tmp, tmp_cls)
 
         # set number of on-mfld, off-mfld (given as input) and total points
-        self.num_pos = np.sum(np.isin(self.dataset.targets, self.use_labels))
+        self.num_pos = int(np.sum(np.isin(self.dataset.targets, self.use_labels)))
         N = None
         num_neg = self.num_neg
         if N is None and num_neg is not None:
@@ -285,12 +286,12 @@ class RealWorldManifolds(ABC):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
         end_idx = 0
         for i in range(len(self.use_labels)):
-            print(np.where(self.dataset_flat[1] == self.use_labels[i]))
+            # print(np.where(self.dataset_flat[1] == self.use_labels[i]))
             self.poca_idx[end_idx:end_idx+self._num_offmfld_by_class[i]] = np.random.choice(np.where(self.dataset_flat[1] == self.use_labels[i])[0], size=self._num_offmfld_by_class[i], replace=True).astype(np.int64)
             end_idx += self._num_offmfld_by_class[i]
         assert end_idx == self.num_neg
         self.uniq_poca_idx = np.unique(self.poca_idx)
-        print("uniq_poca_idx", self.uniq_poca_idx, self.uniq_poca_idx.shape)
+        # print("uniq_poca_idx", self.uniq_poca_idx, self.uniq_poca_idx.shape)
         self.poca_idx_counts = np.zeros(self.uniq_poca_idx.shape[0], dtype=np.int64)
         tmp = np.unique(self.poca_idx, return_counts=True)
         self.poca_idx_counts[np.where(tmp[0] == self.uniq_poca_idx)[0]] = tmp[1]
@@ -331,7 +332,7 @@ class RealWorldManifolds(ABC):
         num_offmfld_per_idx = max(self.poca_idx_counts)
         total_num_neg_made = 0
 
-        uniq_poca_idx = np.where(self.poca_idx_counts != 0)[0]
+        uniq_poca_idx = self.poca_idx[self.poca_idx_counts == 1]
 
         for i in tqdm(range(0, len(uniq_poca_idx), pp_chunk_size), desc="computing off mfld (2)"):
             
@@ -351,7 +352,7 @@ class RealWorldManifolds(ABC):
             # on_mfld_pts = self.on_mfld_pts[i:min(self.num_pos, i+pp_chunk_size)].numpy()
             # nbhrs = self.on_mfld_pts[nbhr_indices].numpy()
             on_mfld_pts = self.on_mfld_pts[poca_idx].numpy()
-            print(nbhr_indices, self.on_mfld_pts.shape)
+            # print(nbhr_indices, self.on_mfld_pts.shape)
             nbhrs = self.on_mfld_pts.numpy()[nbhr_indices]
 
             # print(nbhrs.shape)
@@ -401,7 +402,7 @@ class RealWorldManifolds(ABC):
             off_mfld_pb = off_mfld_pb * np.expand_dims(off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=-1), axis=-1)
             off_mfld_pts_for_chunk = new_pocas_for_chunk + off_mfld_pb
             indices_to_use = sum([[(j * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
-            print(num_offmfld_per_idx, indices_to_use, self.poca_idx_counts)
+            # print(num_offmfld_per_idx, indices_to_use, self.poca_idx_counts)
             off_mfld_pts = off_mfld_pts_for_chunk.reshape(actual_chunk_size, -1)[indices_to_use]
             off_mfld_dists = off_mfld_pb_sizes.reshape(actual_chunk_size)[indices_to_use]
 
@@ -416,7 +417,7 @@ class RealWorldManifolds(ABC):
             self.all_points[i:i+actual_chunk_size] = off_mfld_pts
             self.pre_class_labels[i:i+actual_chunk_size] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
             self.pre_class_idx[i:i+actual_chunk_size] = self._map_class_label_to_idx(self.pre_class_labels[i:i+actual_chunk_size])
-            print(self.pre_class_idx)
+            # print(self.pre_class_idx)
 
             self.class_labels[i:i+actual_chunk_size] = self.off_mfld_label
             self.class_idx[i:i+actual_chunk_size] = len(self.use_labels)
@@ -469,12 +470,18 @@ class RealWorldManifolds(ABC):
         self.all_actual_distances[self.num_neg:, :] = self.M
         self.all_actual_distances[np.arange(self.num_neg, self.N), self.pre_class_idx[self.num_neg:]] = 0
 
+        for attr in ["all_points", "all_actual_distances", "class_idx", "class_labels", "pre_class_labels", "pre_class_idx"]:
+            attr_val = getattr(self, attr)
+            if not torch.is_tensor(attr_val):
+                setattr(self, attr, torch.from_numpy(attr_val))
+
+
     @abstractmethod
     def save_data(self, save_dir):
 
         os.makedirs(save_dir, exist_ok=True)
         specs_fn = os.path.join(save_dir, "specs.json")
-        data_fn = os.path.join(save_dir, "data.pkl")
+        data_fn = os.path.join(save_dir, "data.json")
 
         specs_attrs = dict()
         data_attrs = dict()
@@ -482,10 +489,11 @@ class RealWorldManifolds(ABC):
         attr_set = vars(self)
         for attr in attr_set:
 
-            if attr in ["dataset", "dataset_flat"]:
+            if attr in ["knn"]:
                 continue
             
-            if (type(attr_set[attr]) == str) or not isinstance(attr_set[attr], Iterable):
+            # if (type(attr_set[attr]) == str) or not isinstance(attr_set[attr], Iterable):
+            if is_jsonable(attr_set[attr]):
                 specs_attrs[attr] = attr_set[attr]
             else:
                 attr_fn = os.path.join(save_dir, attr + ".pkl")
@@ -493,26 +501,33 @@ class RealWorldManifolds(ABC):
                 logger.info("[{}]: data attribute ({}) saved to: {}".format(self.__class__.__name__, attr, attr_fn))
                 data_attrs[attr] = {"is_data_attr": True, "path": attr + ".pkl"}
         
+        # print(specs_attrs)
+        # for i in specs_attrs:
+        #     print(i, specs_attrs[i], type(specs_attrs[i]))
         with open(specs_fn, "w+") as f:
             json.dump(specs_attrs, f)
 
-        torch.save(data_attrs, data_fn)
+        with open(data_fn, "w+") as f:
+            json.dump(data_attrs, f)
+        # torch.save(data_attrs, data_fn)
 
     @abstractmethod
     def load_data(self, dump_dir):
         specs_fn = os.path.join(dump_dir, "specs.json")
-        data_fn = os.path.join(dump_dir, "data.pkl")
+        data_fn = os.path.join(dump_dir, "data.json")
 
         with open(specs_fn) as f:
             specs_attrs = json.load(f)
 
-        data_attrs = torch.load(data_fn)
+        with open(data_fn) as f:
+            data_attrs = json.load(f)
+        # data_attrs = torch.load(data_fn)
 
         attrs = {**specs_attrs, **data_attrs}
 
         attr_set = vars(self)
         for attr in attr_set:
-            if attr in ["dataset", "dataset_flat"]:
+            if attr in ["dataset", "dataset_flat", "knn", "transform"]:
                 continue
             if attr in attrs:
                 if type(attrs[attr]) == dict and "is_data_attr" in attrs[attr]:
@@ -525,7 +540,7 @@ class RealWorldManifolds(ABC):
                 else:
                     setattr(self, attr, attrs[attr])
 
-        self.dataset, self.dataset_flat = self.load_raw_om_data()
+        # self.dataset, self.dataset_flat = self.load_raw_om_data()
 
     @classmethod
     @abstractmethod
@@ -566,16 +581,16 @@ class RealWorldManifolds(ABC):
         logger.info("[{}]: generating test set...".format(cls.__name__))
         if has_val:
             test_cfg = cfg_dict["test"]
-            test_set = cls(**test_cfg)
-            if strategy == "only":
-                test_set.compute_points()
-            elif strategy == "full":
-                om_augs = train_set.dataset_flat
-                test_set.compute_points(om_augs)
         else:
             logger.info("[{}]: dataset has no val set. test set will be copy of val set".format(cls.__name__))
-            logger.info("[{}]: generating copy...".format(cls.__name__))
-            test_set = copy.deepcopy(val_set)
+            logger.info("[{}]: generating copy of val config...".format(cls.__name__))
+            test_cfg = copy.deepcopy(cfg_dict["val"])
+        test_set = cls(**test_cfg)
+        if strategy == "only":
+            test_set.compute_points()
+        elif strategy == "full":
+            om_augs = train_set.dataset_flat
+            test_set.compute_points(om_augs)
         logger.info("[{}]: test set generation done!".format(cls.__name__))
 
 
@@ -609,12 +624,7 @@ class RealWorldManifolds(ABC):
         train_dir = os.path.join(dump_dir, "train")
         os.makedirs(train_dir, exist_ok=True)
         train_set = cls()
-
-        try:
-            train_set.load_data(train_dir)
-        except:
-            logger.info("[ConcentricSpheres]: could not load train split!")
-            train_set = None
+        train_set.load_data(train_dir)
 
         val_dir = os.path.join(dump_dir, "val")
         os.makedirs(val_dir, exist_ok=True)
