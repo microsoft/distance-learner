@@ -223,8 +223,27 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
 
         writer.add_graph(model, dataloaders["train"].dataset.normed_all_points[:dataloaders["train"].batch_size])
 
+    elif hasattr(dataloaders["train"].dataset, "all_actual_distances"):
+        
+        for phase in ["train", "val"]:
+
+            writer.add_histogram(phase + "/S1/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 0])
+            writer.add_histogram(phase + "/S2/actual_distances", dataloaders[phase].dataset.all_actual_distances[:, 1])
+
+        
+        capture_attrs =  ["S1_config", "S2_config", "n", "seed"]
+
+        for phase in ["train", "val"]:
+            data_vars = vars(dataloaders[phase].dataset)
+            writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
+        
+
+        writer.add_graph(model, dataloaders["train"].dataset.all_points[:dataloaders["train"].batch_size])
+
+        
 
     else:
+
         writer.add_histogram("train/distances", dataloaders["train"].dataset.tensors[1])
         writer.add_histogram("val/distances", dataloaders["val"].dataset.tensors[1])
 
