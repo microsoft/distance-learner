@@ -61,6 +61,7 @@ class RealWorldManifolds(ABC):
         buf_nn=2,
         max_t_delta=1e-3,
         max_norm=1e-1,
+        D=7e-2,
         M=1.0,
         transform=None,
         **kwargs):
@@ -95,6 +96,8 @@ class RealWorldManifolds(ABC):
         :type max_t_delta: float
         :param max_norm: maximum normal perturbation
         :type max_norm: float
+        :param D: threshold distance
+        :type D: float
         :param M: high value of distance set for distance to the other manifolds
         :type M: float
         :param transform: transform to apply to samples in the dataset
@@ -139,6 +142,7 @@ class RealWorldManifolds(ABC):
 
         self.max_t_delta = max_t_delta
         self.max_norm = max_norm
+        self.D = D
         self.M = M
 
         self._num_offmfld_by_class = [self.num_neg // len(self.use_labels)] * len(self.use_labels)
@@ -166,6 +170,7 @@ class RealWorldManifolds(ABC):
         
         self.poca_idx = None
         self.poca_idx_counts = None
+        self.uniq_poca_idx = None
         self.nn_indices = None
         self.nn_distances = None
 
@@ -290,12 +295,8 @@ class RealWorldManifolds(ABC):
             self.poca_idx[end_idx:end_idx+self._num_offmfld_by_class[i]] = np.random.choice(np.where(self.dataset_flat[1] == self.use_labels[i])[0], size=self._num_offmfld_by_class[i], replace=True).astype(np.int64)
             end_idx += self._num_offmfld_by_class[i]
         assert end_idx == self.num_neg
-        self.uniq_poca_idx = np.unique(self.poca_idx)
-        # print("uniq_poca_idx", self.uniq_poca_idx, self.uniq_poca_idx.shape)
-        self.poca_idx_counts = np.zeros(self.uniq_poca_idx.shape[0], dtype=np.int64)
-        tmp = np.unique(self.poca_idx, return_counts=True)
-        self.poca_idx_counts[np.where(tmp[0] == self.uniq_poca_idx)[0]] = tmp[1]
-        # self.poca_idx_counts[tmp[0]] = tmp[1]
+        self.uniq_poca_idx, self.poca_idx_counts = np.unique(self.poca_idx, return_counts=True)
+        
 
     def make_inferred_off_mfld(self, pp_chunk_size=5000):
         """
@@ -329,10 +330,10 @@ class RealWorldManifolds(ABC):
         if self.pre_class_idx is None:
             self.pre_class_idx = np.zeros(self.N).astype(np.int64)
         
-        num_offmfld_per_idx = max(self.poca_idx_counts)
+        num_offmfld_per_idx = max(self.poca_idx_counts) if len(self.poca_idx_counts) > 0 else 0
         total_num_neg_made = 0
 
-        uniq_poca_idx = self.poca_idx[self.poca_idx_counts == 1]
+        uniq_poca_idx = self.uniq_poca_idx.copy().astype(np.int64)
 
         for i in tqdm(range(0, len(uniq_poca_idx), pp_chunk_size), desc="computing off mfld (2)"):
             
@@ -376,7 +377,7 @@ class RealWorldManifolds(ABC):
 
             all_tang_and_norms = np.array(all_tang_and_norms)
             if self.N <= 20000:
-                self.all_tang_and_norms = all_tang_and_norms
+                self.all_tang_and_norms = torch.from_numpy(all_tang_and_norms)
 
             # actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
             
@@ -401,28 +402,33 @@ class RealWorldManifolds(ABC):
 
             off_mfld_pb = off_mfld_pb * np.expand_dims(off_mfld_pb_sizes / np.linalg.norm(off_mfld_pb, axis=-1), axis=-1)
             off_mfld_pts_for_chunk = new_pocas_for_chunk + off_mfld_pb
+
             indices_to_use = sum([[(j * num_offmfld_per_idx) + k for k in range(self.poca_idx_counts[i + j])] for j in range(actual_chunk_size)], [])
-            # print(num_offmfld_per_idx, indices_to_use, self.poca_idx_counts)
-            off_mfld_pts = off_mfld_pts_for_chunk.reshape(actual_chunk_size, -1)[indices_to_use]
-            off_mfld_dists = off_mfld_pb_sizes.reshape(actual_chunk_size)[indices_to_use]
+            # print(num_offmfld_per_idx, indices_to_use, self.poca_idx_counts, self.uniq_poca_idx)
+            off_mfld_pts = off_mfld_pts_for_chunk.reshape(-1, self.n)[indices_to_use]
+            off_mfld_dists = off_mfld_pb_sizes.reshape(-1)[indices_to_use]
 
             if self.N <= 20000:
                 self.on_mfld_pb = torch.from_numpy(on_mfld_pb)
                 self.off_mfld_pb = torch.from_numpy(off_mfld_pb)
                 self.off_mfld_pts_for_chunk = torch.from_numpy(off_mfld_pts_for_chunk)
 
-            total_num_neg_made += off_mfld_pts_for_chunk.shape[0]
+            total_num_neg_made += off_mfld_pts.shape[0]
             
             assert (i + actual_chunk_size) <= self.num_neg, "generated number of points ({}) exceeding `num_neg` ({})".format(i + actual_chunk_size, self.num_neg)
-            self.all_points[i:i+actual_chunk_size] = off_mfld_pts
-            self.pre_class_labels[i:i+actual_chunk_size] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
-            self.pre_class_idx[i:i+actual_chunk_size] = self._map_class_label_to_idx(self.pre_class_labels[i:i+actual_chunk_size])
+            
+            offset = off_mfld_pts.shape[0]
+            self.all_points[i:i+offset] = off_mfld_pts
+            idx_for_cls = sum([[self.uniq_poca_idx[i+j]] * self.poca_idx_counts[i+j] for j in range(actual_chunk_size)], [])
+            # self.pre_class_labels[i:i+offset] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
+            self.pre_class_labels[i:i+offset] = self.on_mfld_class_labels[idx_for_cls]
+            self.pre_class_idx[i:i+offset] = self._map_class_label_to_idx(self.pre_class_labels[i:i+offset])
             # print(self.pre_class_idx)
 
-            self.class_labels[i:i+actual_chunk_size] = self.off_mfld_label
-            self.class_idx[i:i+actual_chunk_size] = len(self.use_labels)
-            self.all_actual_distances[i:i+actual_chunk_size, :] = self.M
-            self.all_actual_distances[np.arange(i, i+actual_chunk_size), self.pre_class_idx[i:i+actual_chunk_size]] = off_mfld_dists
+            self.class_labels[i:i+offset] = self.off_mfld_label
+            self.class_idx[i:i+offset] = len(self.use_labels)
+            self.all_actual_distances[i:i+offset, :] = self.M
+            self.all_actual_distances[np.arange(i, i+offset), self.pre_class_idx[i:i+offset]] = off_mfld_dists
             # self.all_actual_distances[np.arange(i, i+actual_chunk_size), self.pre_class_labels[i:i+actual_chunk_size]] = off_mfld_dists
 
 
@@ -470,10 +476,14 @@ class RealWorldManifolds(ABC):
         self.all_actual_distances[self.num_neg:, :] = self.M
         self.all_actual_distances[np.arange(self.num_neg, self.N), self.pre_class_idx[self.num_neg:]] = 0
 
-        for attr in ["all_points", "all_actual_distances", "class_idx", "class_labels", "pre_class_labels", "pre_class_idx"]:
+        for attr in ["all_points", "all_actual_distances", \
+            "class_idx", "class_labels", "pre_class_labels", "pre_class_idx"]:
             attr_val = getattr(self, attr)
             if not torch.is_tensor(attr_val):
-                setattr(self, attr, torch.from_numpy(attr_val))
+                if attr in ["class_idx", "class_labels", "pre_class_labels", "pre_class_idx"]:
+                    setattr(self, attr, torch.from_numpy(attr_val).long())
+                else:
+                    setattr(self, attr, torch.from_numpy(attr_val).float())
 
 
     @abstractmethod
@@ -497,6 +507,7 @@ class RealWorldManifolds(ABC):
                 specs_attrs[attr] = attr_set[attr]
             else:
                 attr_fn = os.path.join(save_dir, attr + ".pkl")
+                # print(attr)
                 torch.save(attr_set[attr], attr_fn)
                 logger.info("[{}]: data attribute ({}) saved to: {}".format(self.__class__.__name__, attr, attr_fn))
                 data_attrs[attr] = {"is_data_attr": True, "path": attr + ".pkl"}
@@ -647,7 +658,9 @@ class RealWorldManifolds(ABC):
         item_attr_map = {
             "points": "all_points",
             "actual_distances": "all_actual_distances",
+            "pre_class_idx": "pre_class_idx",
             "pre_classes": "pre_class_labels",
+            "class_idx": "class_idx",
             "classes": "class_labels"
         }
 
