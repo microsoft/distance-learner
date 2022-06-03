@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from collections import OrderedDict
 
 import faiss
@@ -7,6 +8,13 @@ import torch
 from torch.utils.data import Dataset
 
 import numpy as np
+
+def is_jsonable(x):
+    try:
+        json.dumps(x)
+        return True
+    except:
+        return False
 
 class FaissKNeighbors:
     def __init__(self, k=5):

@@ -35,9 +35,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
 
     def __init__(
         self,
-        num_neg,
-        on_mfld_path,
-        k,
+        num_neg=60000,
+        on_mfld_path="./data",
+        k="25",
         n=784,
         use_labels=[1, 9],
         off_mfld_label=0,
