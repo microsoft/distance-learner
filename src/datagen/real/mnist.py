@@ -49,6 +49,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         buf_nn=2,
         max_t_delta=1e-3,
         max_norm=1e-1,
+        D=7e-2,
         M=1.0,
         transform=None,
         **kwargs):
@@ -70,6 +71,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             buf_nn=buf_nn,
             max_t_delta=max_t_delta,
             max_norm=max_norm,
+            D=D,
             M=M,
             transform=transform,
             **kwargs)
@@ -131,7 +133,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         return super().load_data(dump_dir)
 
     @classmethod
-    def get_demo_cfg_dict(cls, N=120000, num_neg=60000):
+    def get_demo_cfg_dict(cls, num_neg=60000):
 
         strategy = "only"
         has_val = False
@@ -144,7 +146,6 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             "off_mfld_label": 9,
             "split": "train",
             "seed": 23,
-            "N": N,
             "num_neg": num_neg,
             "nn": 50,
             "buf_nn": 2,
@@ -155,9 +156,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)
-        val_cfg_dict["num_pos"] = 10000
         val_cfg_dict["num_neg"] = 0
-        val_cfg_dict["N"] = 10000
         val_cfg_dict["split"] = "test" # since has_val == False
 
         test_cfg_dict = copy.deepcopy(val_cfg_dict)

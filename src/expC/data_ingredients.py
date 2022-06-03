@@ -9,9 +9,10 @@ from sacred import Ingredient
 
 from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, concentricspheres, wellseparatedspheres
+from datagen.real import mnist
 
 from data_configs import conc_spheres_cfg, inf_ittw_swissrolls_cfg, inf_ittw_swissrolls_cfg2, inf_ws_spheres_cfg,\
-     sphere_cfg, ittw_swissrolls_cfg, synth_conc_spheres_cfg, inf_conc_spheres_cfg, ws_spheres_cfg
+     sphere_cfg, ittw_swissrolls_cfg, synth_conc_spheres_cfg, inf_conc_spheres_cfg, ws_spheres_cfg, mnist_cfg
 
 DATA_CONFIGS = {
     "single-sphere": sphere_cfg,
@@ -22,7 +23,8 @@ DATA_CONFIGS = {
     "synth-conc-spheres": synth_conc_spheres_cfg,
     "inf-conc-spheres": inf_conc_spheres_cfg,
     "ws-spheres": ws_spheres_cfg,
-    "inf-ws-spheres": inf_ws_spheres_cfg
+    "inf-ws-spheres": inf_ws_spheres_cfg,
+    "mnist": mnist_cfg
 }
 
 DATA_TYPE = {
@@ -35,7 +37,8 @@ DATA_TYPE = {
     "synth-conc-spheres": concentricspheres.ConcentricSpheres,
     "inf-conc-spheres": concentricspheres.ConcentricSpheres,
     "ws-spheres": wellseparatedspheres.WellSeparatedSpheres,
-    "inf-ws-spheres": wellseparatedspheres.WellSeparatedSpheres
+    "inf-ws-spheres": wellseparatedspheres.WellSeparatedSpheres,
+    "mnist": mnist.MNISTManifolds
 }
 
 data_ingredient = Ingredient('data')
