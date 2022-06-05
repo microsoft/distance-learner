@@ -112,14 +112,18 @@
 
 
 
-```
+```bash
  python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list
  ```
 
- ```
+ ```bash
  /root/anaconda3/bin/python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_concspheres_test/" dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs" "input_files.settings_to_analyze=['rdm_concspheres_k25n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_1e-3/5','rdm_concspheres_k25n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_1e-3/6']"
  ```
 
-  ```
+  ```bash
  /root/anaconda3/bin/python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test/" dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test/attack_perfs_on_runs" "input_files.settings_to_analyze=['rdm_swrolls_k50n500_noninfdist_moreoffmfldv3_inferred_maxtdelta_1e-3/1', 'rdm_wsspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_1e-3/6']" attack.eps="[0.004, 0.005, 0.006, 0.007, 0.008, 0.009, 0.01 , 0.011, 0.012, 0.013, 0.014, 0.015, 0.016, 0.017, 0.018, 0.019, 0.02 , 0.021, 0.022, 0.023, 0.024, 0.025, 0.026, 0.027, 0.028, 0.029, 0.03 , 0.031, 0.032, 0.033, 0.034, 0.035, 0.036, 0.037, 0.038, 0.039]" th_analyze="[float('inf'), 0.004, 0.008, 0.012, 0.016, 0.02 , 0.024, 0.028, 0.032, 0.036, 0.04 , 0.044, 0.048, 0.052, 0.056]"
+ ```
+
+ ```bash
+ python3 get_attack_perf.py with debug=False input_files.settings_type=list input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test/" dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test/attack_perfs_on_runs/" "input_files.settings_to_analyze=['rdm_swrolls_k50n500_noninfdist_moreoffmfldv3/1']" attack.eps="[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]" th_analyze="[float('inf'), 0.025, 0.05, 0.1, 0.125, 0.15, 0.2, 0.225, 0.25, 0.3, 0.325, 0.35]"
  ```
