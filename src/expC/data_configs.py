@@ -390,3 +390,46 @@ def ws_spheres_cfg():
     }
 
     return cfg
+
+def mnist_cfg():
+
+    strategy = "only"
+    has_val = False
+
+    train_cfg_dict = {
+        "on_mfld_path": "/mnt/t-achetan/datasets/MNIST",
+        "k": 10,
+        "n": 784,
+        "use_labels": [1, 8],
+        "off_mfld_label": 9,
+        "download": True,
+        "split": "train",
+        "seed": 23,
+        "num_neg": 1000000,
+        "nn": 50,
+        "buf_nn": 2,
+        "max_t_delta": 1e-3,
+        "D": 7e-2,
+        "max_norm": 1e-1,
+        "M": 1.0,
+        "online": False,
+        "off_online": False,
+        "augment": False,
+        "transform": None
+    }
+
+    val_cfg_dict = copy.deepcopy(train_cfg_dict)
+    val_cfg_dict["num_neg"] = 0
+    val_cfg_dict["split"] = "test" # since has_val == False
+
+    test_cfg_dict = copy.deepcopy(val_cfg_dict)
+
+    cfg_dict = {
+        "strategy": "only",
+        "has_val": False,
+        "train": train_cfg_dict,
+        "val": val_cfg_dict,
+        "test": test_cfg_dict
+    }
+
+    return cfg_dict
