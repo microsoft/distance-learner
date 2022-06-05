@@ -11,6 +11,7 @@ from torch.utils.data import TensorDataset, Dataset, DataLoader
 
 from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspheres, concentricspheres
+from datagen.real import mnist
 
 from expC_utils.common import *
 from expC_utils import plot_ittwswrolls
@@ -22,7 +23,8 @@ MFLD_TYPES = {
     "inf-ittw-swissrolls": intertwinedswissrolls.IntertwinedSwissRolls,
     "inf-ittw-swissrolls2": intertwinedswissrolls.IntertwinedSwissRolls,
     "inf-ws-spheres": wellseparatedspheres.WellSeparatedSpheres,
-    "inf-conc-spheres": concentricspheres.ConcentricSpheres
+    "inf-conc-spheres": concentricspheres.ConcentricSpheres,
+    "mnist": mnist.MNISTManifolds
 }
 
 MFLD_VIZ_BY_TYPE = {
