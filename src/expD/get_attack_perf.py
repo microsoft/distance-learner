@@ -388,7 +388,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
     else:
 
         for th in th_analyze:
-            th = float(th)
+            # th = float(th)
             # for normal examples (will be helpful for comparison)
             true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
             pred_classes = torch.min(logits_of_raw_ex, dim=1)[1]
