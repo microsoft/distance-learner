@@ -172,7 +172,7 @@ class RealWorldManifolds(ABC):
 
         self.all_points = None
         self.all_actual_distances = None
-        self.normed_actual_distances = None
+        self.normed_all_actual_distances = None
         self.normed_all_points = None
         self.class_labels = None
         self.class_idx = None
@@ -513,8 +513,8 @@ class RealWorldManifolds(ABC):
 
         logger.info("[{}]: norm_factor = {}".format(self.__class__.__name__, self.norm_factor))
         self.normed_all_points = (self.all_points - self.norm_factor[2]) / self.norm_factor[3]
-        self.normed_actual_distances = self.all_actual_distances.clone()
-        self.normed_actual_distances[self.all_actual_distances != self.M] = (self.all_actual_distances[self.all_actual_distances != self.M] - self.norm_factor[0]) / (self.norm_factor[1] - self.norm_factor[0])
+        self.normed_all_actual_distances = self.all_actual_distances.clone()
+        self.normed_all_actual_distances[self.all_actual_distances != self.M] = (self.all_actual_distances[self.all_actual_distances != self.M] - self.norm_factor[0]) / (self.norm_factor[1] - self.norm_factor[0])
         logger.info("[{}]: normalization done!".format(self.__class__.__name__))
 
     @abstractmethod
@@ -692,7 +692,7 @@ class RealWorldManifolds(ABC):
             "points": "all_points",
             "normed_points": "normed_all_points",
             "actual_distances": "all_actual_distances",
-            "normed_distances": "normed_actual_distances",
+            "normed_actual_distances": "normed_all_actual_distances",
             "pre_class_idx": "pre_class_idx",
             "pre_classes": "pre_class_labels",
             "class_idx": "class_idx",
