@@ -50,7 +50,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
         max_t_delta=1e-3,
         max_norm=1e-1,
         D=7e-2,
-        M=1.0,
+        M=10.0,
+        normalize=True,
+        norm_factor=None,
         transform=None,
         **kwargs):
 
@@ -73,6 +75,8 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             max_norm=max_norm,
             D=D,
             M=M,
+            normalize=normalize,
+            norm_factor=norm_factor,
             transform=transform,
             **kwargs)
 
@@ -125,6 +129,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
 
     def compute_points(self, om_augs=None):
         return super().compute_points(om_augs)
+
+    def norm(self):
+        return super().norm()
 
     def save_data(self, save_dir):
         return super().save_data(save_dir)
