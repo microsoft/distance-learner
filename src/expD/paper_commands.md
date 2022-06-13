@@ -125,5 +125,5 @@
  ```
 
  ```bash
- python3 get_attack_perf.py with debug=False input_files.settings_type=list input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test/" dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test/attack_perfs_on_runs/" "input_files.settings_to_analyze=['rdm_swrolls_k50n500_noninfdist_moreoffmfldv3/1']" attack.eps="[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]" th_analyze="[float('inf'), 0.025, 0.05, 0.1, 0.125, 0.15, 0.2, 0.225, 0.25, 0.3, 0.325, 0.35]"
+ python3 get_attack_perf.py with debug=False input_files.settings_type=list input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test/" dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test/attack_perfs_on_runs/" "input_files.settings_to_analyze=['rdm_swrolls_k50n500_noninfdist_moreoffmfldv3/1']" attack.eps="[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35]" th_analyze="np.array([float('inf'), 0.025, 0.05, 0.1, 0.125, 0.15, 0.2, 0.225, 0.25, 0.3, 0.325, 0.35])"
  ```
