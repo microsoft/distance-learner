@@ -3,7 +3,7 @@
 ## Distance Learner
 
 ```bash
-/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=1e-4 batch_size=4096 debug=False loss_func=std_mse ftname=points tgtname=actual_distances model.hidden_sizes="[512, 512, 512, 512, 512, 512, 512, 512]" OFF_MFLD_LABEL=9 data.mtype=mnist data.logdir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/mnist_test/" \
+/root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=2 num_epochs=1000 cooldown=700 warmup=10 lr=1e-4 batch_size=4096 debug=False loss_func=std_mse ftname=normed_points tgtname=normed_distances model.hidden_sizes="[512, 512, 512, 512, 512, 512, 512, 512]" OFF_MFLD_LABEL=9 data.mtype=mnist data.logdir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/mnist_test/" \
  data.data_tag=mnist_18_val_only_moreoffmfldv3_nn10_highmn \
  data.data_params.train.num_neg=6000000 \
  data.data_params.train.nn=10 \
