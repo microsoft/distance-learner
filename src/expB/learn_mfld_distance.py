@@ -230,8 +230,10 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             data_vars = vars(dataloaders[phase].dataset)
             writer.add_text(phase + "/data/params", str({i: data_vars[i] for i in data_vars if i in capture_attrs}))
         
-
-        writer.add_graph(model, dataloaders["train"].dataset.normed_all_points[:dataloaders["train"].batch_size])
+        if hasattr(dataloaders["train"].dataset, "normed_all_points"):
+            writer.add_graph(model, dataloaders["train"].dataset.normed_all_points[:dataloaders["train"].batch_size])
+        else:
+            writer.add_graph(model, dataloaders["train"].dataset.all_points[:dataloaders["train"].batch_size])
 
         
 
