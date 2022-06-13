@@ -80,23 +80,16 @@ def masked_mse_loss_for_far_mfld(logits, targets):
         :param targets: logit tensor with dim (num_samples x num_classes)
         :type targets: torch.Tensor(num_samples x num_classes)
     """
+    loss = None
     if np.inf not in targets:
         gt_far_classes = torch.max(targets, axis=1)[1]
         mask = torch.zeros_like(targets, requires_grad=False)
         mask[torch.arange(0, mask.shape[0]), gt_far_classes] = 1
         mask = mask.to(logits.device)
-        # targets[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
-        # logits[torch.arange(0, mask.shape[0]), gt_far_classes] = 0
-        # print(targets, gt_far_classes, mask, mask.shape)
-        # loss = ((logits - targets)**2).mean()
         loss = ((1 - mask) * ((logits - targets) ** 2)).sum() / (1 - mask).sum()
-        # print(targets, (1 - mask) * ((logits - targets) ** 2))
-        # print(loss)
-
     else:
         unmask = targets != np.inf
         unmask = unmask.to(logits.device)
-        # print(unmask.device, logits.device, targets.device)
         loss = ((logits[unmask] - targets[unmask]) ** 2).sum() / unmask.sum()
     return loss
 
