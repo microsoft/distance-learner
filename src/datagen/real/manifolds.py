@@ -62,7 +62,9 @@ class RealWorldManifolds(ABC):
         max_t_delta=1e-3,
         max_norm=1e-1,
         D=7e-2,
-        M=1.0,
+        M=10.0,
+        normalize=True,
+        norm_factor=None,
         transform=None,
         **kwargs):
         """
@@ -100,6 +102,10 @@ class RealWorldManifolds(ABC):
         :type D: float
         :param M: high value of distance set for distance to the other manifolds
         :type M: float
+        :param normalize: flag whether to normalize or not
+        :type normalize: bool
+        :param norm_factor: normalization factor
+        :type norm_factor: float
         :param transform: transform to apply to samples in the dataset
         :type transform: Optional[Callable]
         """
@@ -144,6 +150,9 @@ class RealWorldManifolds(ABC):
         self.max_norm = max_norm
         self.D = D
         self.M = M
+        self.normalize = normalize
+        self.norm_factor = norm_factor
+
 
         self._num_offmfld_by_class = [self.num_neg // len(self.use_labels)] * len(self.use_labels)
         if sum(self._num_offmfld_by_class) != self.num_neg:
@@ -485,6 +494,21 @@ class RealWorldManifolds(ABC):
                 else:
                     setattr(self, attr, torch.from_numpy(attr_val).float())
 
+        if self.normalize:
+            self.norm()
+
+    @abstractmethod
+    def norm(self):
+        if self.norm_factor is None:
+            self.norm_factor = (
+                torch.min(self.all_actual_distances[self.all_actual_distances != self.M]),
+                torch.max(self.all_actual_distances[self.all_actual_distances != self.M]),
+            )
+            
+        logger.info("[{}]: norm_factor = {}".format(self.__class__.__name__, self.norm_factor))
+        self.normed_actual_distances = self.all_actual_distances.clone()
+        self.normed_actual_distances[self.all_actual_distances != self.M] = (self.all_actual_distances[self.all_actual_distances != self.M] - self.norm_factor[0]) / (self.norm_factor[1] - self.norm_factor[0])
+        logger.info("[{}]: normalization done!".format(self.__class__.__name__))
 
     @abstractmethod
     def save_data(self, save_dir):
@@ -581,6 +605,7 @@ class RealWorldManifolds(ABC):
 
         logger.info("[{}]: generating val set...".format(cls.__name__))
         val_cfg = cfg_dict["val"]
+        val_cfg["norm_factor"] = train_set.norm_factor
         val_set = cls(**val_cfg)
         if strategy == "only":
             val_set.compute_points()
@@ -596,6 +621,7 @@ class RealWorldManifolds(ABC):
             logger.info("[{}]: dataset has no val set. test set will be copy of val set".format(cls.__name__))
             logger.info("[{}]: generating copy of val config...".format(cls.__name__))
             test_cfg = copy.deepcopy(cfg_dict["val"])
+        test_cfg["norm_factor"] = train_set.norm_factor
         test_set = cls(**test_cfg)
         if strategy == "only":
             test_set.compute_points()
