@@ -511,8 +511,8 @@ class IntertwinedSwissRolls(Dataset):
                 self.knn = FaissKNeighbors(k=self.nn + self.buf_nn)
                 to_fit = self.on_mfld_pts_trivial_
                 if self.on_mfld_pts_trivial_ is None:
-                    to_fit = np.zeros((self.N, self.n))
-                    to_fit[:, self.k] = self.on_mfld_pts_k_
+                    to_fit = np.zeros((self.N - self.num_neg, self.n))
+                    to_fit[:, :self.k] = self.on_mfld_pts_k_
                 logger.info("[IntertwinedSwissRolls]: fitting knn...")
                 self.knn.fit(to_fit)
                 logger.info("[IntertwinedSwissRolls]: knn fit done")
