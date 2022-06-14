@@ -546,7 +546,7 @@ class IntertwinedSwissRolls(Dataset):
             logger.info("[IntertwinedSwissRolls]: knn not computed. computing now ...")
             X = None
             if self.on_mfld_pts_trivial_ is None:
-                X = np.zeros((self.N, self.n))
+                X = np.zeros((self.N - self.num_neg, self.n))
                 X[:, :self.k] = self.on_mfld_pts_k_
                 self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
             else:
