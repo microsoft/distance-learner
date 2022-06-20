@@ -80,12 +80,17 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             transform=transform,
             **kwargs)
 
-        if self.transform is None:
-            self.transform = torchvision.transforms.Compose([
-                torchvision.transforms.ToTensor(),
+
+        trfm = [
+                torchvision.transforms.ToTensor()
+        ]
+        if transform == "default":
+            trfm.append([
                 torchvision.transforms.Normalize((0.1307,), (0.3081,))
             ])
-
+        
+        self.transform = torchvision.transforms.Compose(trfm)
+        
 
     def load_raw_om_data(self):
         
@@ -159,7 +164,7 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             "max_t_delta": 1e-3,
             "max_norm": 1e-1,
             "M": 1.0,
-            "transform": None
+            "transform": "default"
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)
