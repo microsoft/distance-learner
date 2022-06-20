@@ -716,6 +716,10 @@ class IntertwinedSwissRolls(Dataset):
                 self.all_points_rot_ = np.dot(self.rotation, self.all_points_tr_.T).T
                 self.all_points_trivial_ = self.all_points.copy()
                 self.all_points = self.all_points_rot_
+                
+                self.all_points_trivial_ = torch.from_numpy(self.all_points_trivial_).float()
+                self.all_points_tr_ = torch.from_numpy(self.all_points_tr_).float()
+                self.all_points_rot_ = torch.from_numpy(self.all_points_rot_).float()
             else:
                 self.all_points += self.translation
                 self.all_points = np.dot(self.rotation, self.all_points.T).T
@@ -725,9 +729,8 @@ class IntertwinedSwissRolls(Dataset):
             pass
 
         # self.all_distances = torch.from_numpy(self.all_distances).float()
-        self.all_points_trivial_ = torch.from_numpy(self.all_points_trivial_).float()
-        self.all_points_tr_ = torch.from_numpy(self.all_points_tr_).float()
-        self.all_points_rot_ = torch.from_numpy(self.all_points_rot_).float()
+        
+        
 
 
 
