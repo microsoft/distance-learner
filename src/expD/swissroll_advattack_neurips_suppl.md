@@ -21,12 +21,12 @@
 
 
  /root/anaconda3/bin/python3 learn_cls_from_dist.py with cuda=1 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls2 \
- data.data_tag=rdm_swrolls_k50n500_noninfdist_moreoffmfldv3_inferred_moreonmfldv3 \
+ data.data_tag=rdm_swrolls_k50n500_noninfdist_moreoffmfldv3_inferred_moreonmfldv2 \
  data.logdir=/mnt/t-achetan/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
  data.backup_dir=/azuredrive/deepimage/data2/t-achetan/adv_geom_dumps/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls_test \
  data.data_params.train.k=50 \
  data.data_params.train.n=500 \
- data.data_params.train.N=12000000 \
+ data.data_params.train.N=9000000 \
  data.data_params.train.num_neg=6000000 \
  data.data_params.val.k=50 \
  data.data_params.val.n=500 \
