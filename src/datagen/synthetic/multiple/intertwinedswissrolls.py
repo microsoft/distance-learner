@@ -136,6 +136,15 @@ class IntertwinedSwissRolls(Dataset):
         self.gamma = gamma
         self.fix_center = None
 
+        self.buf_ht = None
+        self.buf_t = None
+
+        if "buf_ht" in kwargs:
+            self.buf_ht = kwargs["buf_ht"]
+
+        if "buf_t" in kwargs:
+            self.buf_t = kwargs["buf_t"]
+
         ## only relevant when `self._inferred == True`
 
         self.avoid_io = True # generate points without writing intermediate steps to disk
@@ -154,6 +163,7 @@ class IntertwinedSwissRolls(Dataset):
         
         self.nn_indices = None
         self.nn_distances = None
+
         self.new_nn_indices = None
         self.new_nn_distances = None
 
@@ -579,7 +589,11 @@ class IntertwinedSwissRolls(Dataset):
             nbhrs = None
             if self.on_mfld_pts_trivial_ is None:
                 on_mfld_pts = np.zeros((pp_chunk_size, self.n))
-                on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
+                if self.buf_ht is not None and self.buf_t is not None:
+                    non_bdry_idx = (self.on_mfld_pts_k_[:, 0] > self.t_min + self.buf_t) & (self.on_mfld_pts_k_[:, 1] < self.t_max - self.buf_t) & (self.on_mfld_pts_k_[:, 2:] > self.buf_ht).all(axis=1) & (self.on_mfld_pts_k_[:, 2:] < self.height - self.buf_ht).all(axis=1) 
+                    on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[non_bdry_idx][i:i+pp_chunk_size]
+                else:
+                    on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
 
                 nbhrs = np.zeros((pp_chunk_size, nbhr_indices.shape[1], self.n))
                 nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices]
@@ -891,14 +905,18 @@ class IntertwinedSwissRolls(Dataset):
             if not isinstance(attr_set[attr], Iterable):
                 if attr in ["g", "d_g", "g_contract", "dg_contract"] or "nn" in attr:
                     continue
+                print(attr, attr_set[attr], type(attr_set[attr]))
                 specs_attrs[attr] = attr_set[attr]
                 
                     # specs_attrs[attr] = inspect.getsourcelines(specs_attrs[attr])[0][0].split("=")[1].strip()
             else:
                 data_attrs[attr] = attr_set[attr]
 
-        with open(specs_fn, "w+") as f:
-            json.dump(specs_attrs, f)
+        try:
+            with open(specs_fn, "w+") as f:
+                json.dump(specs_attrs, f)
+        except:
+            logger.info("[IntertwinedSwissRolls]: Could not save spec_attrs")
 
         torch.save(data_attrs, data_fn)
 
