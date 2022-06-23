@@ -246,7 +246,8 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
         "normed_points": "normed_all_points",
         "normed_distances": "normed_all_distances",
         "normed_actual_distances": "normed_all_actual_distances",
-        "classes": "class_labels"
+        "classes": "class_labels",
+        "class_idx": "class_idx"
     }
     tgt_attr = attr_name_map[tgtname]
     ft_attr = attr_name_map[ftname]
