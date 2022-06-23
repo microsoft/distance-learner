@@ -33,5 +33,4 @@
 
 ```
 python3 get_attack_perf.py with dump_dir="/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/mnist_test/attack_perfs_on_runs" true_class_attr_name="class_idx" "th_analyze=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 10.0]" "attack.eps=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]" input_files.proj_dir="/mnt/t-achetan/expC_dist_learner_for_adv_ex/mnist_test/" input_files.settings_type=list "input_files.settings_to_analyze=['mnist_18_val_only_moreoffmfldv3_nn10_highmn_nonormpts/3']" "attack.atk_routine=['my']"
-    
 ```
