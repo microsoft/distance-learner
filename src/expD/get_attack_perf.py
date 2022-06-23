@@ -340,6 +340,8 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         return min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx
 
     min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx = get_closest_onmfld_pt(onmfld_pts, all_pb_ex)
+    if hasattr(dataset, "norm_distances"):
+        min_dist_pb_to_raw_normed_vals = dataset.norm_distances(min_dist_pb_to_raw_vals)
 
     if task != "dist":
         # _log.info("what is task here?: {}".format(task))
@@ -447,7 +449,10 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             # for adversarial examples
             adv_true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
             adv_true_preclasses = adv_true_classes.clone()
-            adv_true_classes[min_dist_pb_to_raw_vals > th] = OFF_MFLD_LABEL
+            tmp = min_dist_pb_to_raw_vals
+            if hasattr(dataset, min_dist_pb_to_raw_normed_vals):
+                tmp = min_dist_pb_to_raw_normed_vals
+            adv_true_classes[tmp > th] = OFF_MFLD_LABEL
             adv_pred_classes = torch.min(logits_of_pb_ex, dim=1)[1]
             adv_pred_classes[torch.min(logits_of_pb_ex, dim=1)[0] > th] = OFF_MFLD_LABEL
 
