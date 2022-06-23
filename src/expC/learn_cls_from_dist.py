@@ -269,13 +269,13 @@ def data_setup(task, train, train_on_onmfld, OFF_MFLD_LABEL, batch_size, num_wor
     if task == "clf" and train_on_onmfld:
         idx = 0
         for dataset in [train_set, val_set, test_set]:
-            for attr in ["all_points", "all_distances", "normed_all_points", "normed_all_distances", "class_labels"]:
+            for attr in ["all_points", "all_distances", "normed_all_points", "normed_all_distances", "class_labels", "class_idx", ftname, tgtname]:
                 if not hasattr(dataset, attr):
                     continue
                 if isinstance(dataset, manifold.Manifold):
                     setattr(dataset.genattrs, attr, getattr(dataset.genattrs, attr)[dataset.genattrs.class_labels != OFF_MFLD_LABEL])
                 else:
-                    if attr == "normed_all_points" and idx > 0:
+                    if attr in ["normed_all_points", "all_points"] and idx > 0:
                         
                         if not test_off_mfld:
                             noise_mat = torch.randn(getattr(dataset, attr)[dataset.class_labels != OFF_MFLD_LABEL].shape)
