@@ -450,7 +450,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             adv_true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
             adv_true_preclasses = adv_true_classes.clone()
             tmp = min_dist_pb_to_raw_vals
-            if hasattr(dataset, min_dist_pb_to_raw_normed_vals):
+            if hasattr(dataset, "norm_distances"):
                 tmp = min_dist_pb_to_raw_normed_vals
             adv_true_classes[tmp > th] = OFF_MFLD_LABEL
             adv_pred_classes = torch.min(logits_of_pb_ex, dim=1)[1]
