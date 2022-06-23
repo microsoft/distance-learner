@@ -518,6 +518,11 @@ class RealWorldManifolds(ABC):
         logger.info("[{}]: normalization done!".format(self.__class__.__name__))
 
     @abstractmethod
+    def norm_distances(self, distances):
+        normed_distances = (distances - self.norm_factor[0]) / (self.norm_factor[1] - self.norm_factor[0])
+        return normed_distances
+
+    @abstractmethod
     def save_data(self, save_dir):
 
         os.makedirs(save_dir, exist_ok=True)
