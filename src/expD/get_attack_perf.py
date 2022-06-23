@@ -92,6 +92,8 @@ def config(attack, input_files):
     debug = False
     clean = False
 
+    true_cls_attr_name = "class_idx"
+
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
@@ -114,6 +116,8 @@ def mnist_cfg(attack, input_files):
 
     debug = False
     clean = False
+
+    true_cls_attr_name = "class_idx"
 
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/mnist_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
@@ -169,7 +173,7 @@ def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, ckpt_
     return dataloaders
 
 @ex.capture
-def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, ckpt_to_use, dataloaders=None):
+def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, ckpt_to_use, true_class_attr_name, dataloaders=None):
     
     result_container = list()
 
@@ -258,7 +262,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
         logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex, all_targets = attack_model(dataloaders=dataloaders,\
             model_fn=model_fn, attack_fn=attack_fn, atk_flavor=atk_flavor, atk_routine=atk_routine, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
-            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"])
+            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"], true_cls_attr_name=true_class_attr_name)
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
         if not debug:
@@ -546,7 +550,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
 
 
 @ex.capture
-def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname):
+def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname, true_class_attr_name):
 
     _log.info("logging attack parameters")
     _log.info("atk_flavor={}".format(atk_flavor))
@@ -566,7 +570,8 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     num_neg = np.floor(dl.dataset.N / 2).astype(np.int64).item()
     num_onmfld = dl.dataset.N - num_neg
 
-    num_classes = dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL].max().item() + 1
+    # num_classes = dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL].max().item() + 1
+    num_classes = np.unique(dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL]).shape[0] + 1
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
