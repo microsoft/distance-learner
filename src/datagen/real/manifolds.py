@@ -689,7 +689,7 @@ class RealWorldManifolds(ABC):
 
     @abstractmethod
     def __len__(self):
-        return self.N
+        return self.all_points.shape[0]
 
     @abstractmethod
     def __getitem__(self, idx):
