@@ -346,6 +346,8 @@ class RealWorldManifolds(ABC):
 
         uniq_poca_idx = self.uniq_poca_idx.copy().astype(np.int64)
 
+        start = end = 0
+
         for i in tqdm(range(0, len(uniq_poca_idx), pp_chunk_size), desc="computing off mfld (2)"):
             
             actual_chunk_size = min(pp_chunk_size, len(uniq_poca_idx) - i)
@@ -429,19 +431,20 @@ class RealWorldManifolds(ABC):
             assert (i + actual_chunk_size) <= self.num_neg, "generated number of points ({}) exceeding `num_neg` ({})".format(i + actual_chunk_size, self.num_neg)
             
             offset = off_mfld_pts.shape[0]
-            self.all_points[i:i+offset] = off_mfld_pts
+            end = start + offset
+            self.all_points[start:end] = off_mfld_pts
             idx_for_cls = sum([[self.uniq_poca_idx[i+j]] * self.poca_idx_counts[i+j] for j in range(actual_chunk_size)], [])
             # self.pre_class_labels[i:i+offset] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
-            self.pre_class_labels[i:i+offset] = self.on_mfld_class_labels[idx_for_cls]
-            self.pre_class_idx[i:i+offset] = self._map_class_label_to_idx(self.pre_class_labels[i:i+offset])
+            self.pre_class_labels[start:end] = self.on_mfld_class_labels[idx_for_cls]
+            self.pre_class_idx[start:end] = self._map_class_label_to_idx(self.pre_class_labels[i:i+offset])
             # print(self.pre_class_idx)
 
-            self.class_labels[i:i+offset] = self.off_mfld_label
-            self.class_idx[i:i+offset] = len(self.use_labels)
-            self.all_actual_distances[i:i+offset, :] = self.M
-            self.all_actual_distances[np.arange(i, i+offset), self.pre_class_idx[i:i+offset]] = off_mfld_dists
+            self.class_labels[start:end] = self.off_mfld_label
+            self.class_idx[start:end] = len(self.use_labels)
+            self.all_actual_distances[start:end, :] = self.M
+            self.all_actual_distances[np.arange(start, end), self.pre_class_idx[start:end]] = off_mfld_dists
             # self.all_actual_distances[np.arange(i, i+actual_chunk_size), self.pre_class_labels[i:i+actual_chunk_size]] = off_mfld_dists
-
+            start = end
 
             # self.all_points[i:min(self.num_pos, i+pp_chunk_size)] = off_mfld_pts_for_chunk
             # self.pre_class_labels[i:min(self.num_pos, i+pp_chunk_size)] = self.on_mfld_class_labels[self.poca_idx[i:min(self.num_pos, i+pp_chunk_size)]]
