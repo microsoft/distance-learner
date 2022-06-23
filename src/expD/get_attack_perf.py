@@ -92,7 +92,7 @@ def config(attack, input_files):
     debug = False
     clean = False
 
-    true_cls_attr_name = "class_idx"
+    true_cls_attr_name = "classes"
 
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
@@ -588,7 +588,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 
         inputs = batch[ftname]
         targets = batch[tgtname]
-        true_classes = batch["classes"]
+        true_classes = batch[true_class_attr_name]
 
         # experiment was performed on points 'exactly' on the manifold.
         # in our dataset, these points are those with class labels != 2
