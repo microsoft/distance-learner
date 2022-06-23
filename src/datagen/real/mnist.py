@@ -138,6 +138,9 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
     def norm(self):
         return super().norm()
 
+    def norm_distances(self, distances):
+        return super().norm_distances(distances)
+
     def save_data(self, save_dir):
         return super().save_data(save_dir)
 
