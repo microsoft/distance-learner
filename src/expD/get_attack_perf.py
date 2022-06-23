@@ -262,7 +262,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
         logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex, all_targets = attack_model(dataloaders=dataloaders,\
             model_fn=model_fn, attack_fn=attack_fn, atk_flavor=atk_flavor, atk_routine=atk_routine, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
-            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"], true_cls_attr_name=true_class_attr_name)
+            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"], true_class_attr_name=true_class_attr_name)
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
         if not debug:
