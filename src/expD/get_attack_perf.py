@@ -319,7 +319,18 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
     pct_cm_plot_dir = os.path.join(result_dir, "pct_cm_plots_{}".format(use_split))
     os.makedirs(pct_cm_plot_dir, exist_ok=True)
 
-    onmfld_pts = getattr(dataset, ftname)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
+    item_attr_map = {
+        "points": "all_points",
+        "normed_points": "normed_all_points",
+        "actual_distances": "all_actual_distances",
+        "normed_actual_distances": "normed_all_actual_distances",
+        "pre_class_idx": "pre_class_idx",
+        "pre_classes": "pre_class_labels",
+        "class_idx": "class_idx",
+        "classes": "class_labels"
+    }
+
+    onmfld_pts = getattr(dataset, item_attr_map[ftname])[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
 
     def get_closest_onmfld_pt(onmfld_pts, all_pb_ex):
         pair_dist_pb_to_raw = torch.cdist(all_pb_ex, onmfld_pts)
@@ -555,6 +566,17 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
 @ex.capture
 def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname, true_cls_batch_attr_name, true_cls_attr_name):
 
+    item_attr_map = {
+        "points": "all_points",
+        "normed_points": "normed_all_points",
+        "actual_distances": "all_actual_distances",
+        "normed_actual_distances": "normed_all_actual_distances",
+        "pre_class_idx": "pre_class_idx",
+        "pre_classes": "pre_class_labels",
+        "class_idx": "class_idx",
+        "classes": "class_labels"
+    }
+
     _log.info("logging attack parameters")
     _log.info("atk_flavor={}".format(atk_flavor))
     _log.info("atk_routine={}".format(atk_routine))
@@ -578,8 +600,8 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
-    all_deltas = torch.zeros(num_onmfld, getattr(dl.dataset, ftname).shape[1])
-    all_pb_ex = torch.zeros(num_onmfld, getattr(dl.dataset, ftname).shape[1])
+    all_deltas = torch.zeros(num_onmfld, getattr(dl.dataset, item_attr_map[ftname]).shape[1])
+    all_pb_ex = torch.zeros(num_onmfld, getattr(dl.dataset, item_attr_map[ftname]).shape[1])
 
     all_targets = torch.zeros(num_onmfld, num_classes)
     if task == "clf":
