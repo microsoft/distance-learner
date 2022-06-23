@@ -92,7 +92,8 @@ def config(attack, input_files):
     debug = False
     clean = False
 
-    true_cls_attr_name = "classes"
+    true_cls_batch_attr_name = "classes"
+    true_cls_attr_name = "class_labels"
 
     # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
@@ -118,6 +119,7 @@ def mnist_cfg(attack, input_files):
     clean = False
 
     true_cls_attr_name = "class_idx"
+    true_cls_batch_attr_name = "class_idx"
 
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/mnist_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
@@ -173,7 +175,7 @@ def load_data_for_run(run_parent_dir, run_config, batch_size, num_workers, ckpt_
     return dataloaders
 
 @ex.capture
-def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, ckpt_to_use, true_class_attr_name, dataloaders=None):
+def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, _log, debug, ckpt_to_use, true_cls_batch_attr_name, true_cls_attr_name, dataloaders=None):
     
     result_container = list()
 
@@ -262,7 +264,8 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
 
         logits_of_pb_ex, all_pb_ex, all_deltas, logits_of_raw_ex, all_targets = attack_model(dataloaders=dataloaders,\
             model_fn=model_fn, attack_fn=attack_fn, atk_flavor=atk_flavor, atk_routine=atk_routine, task=task, eps=eps, eps_iter=eps_iter, nb_iter=nb_iter,\
-            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"], true_class_attr_name=true_class_attr_name)
+            norm=norm, verbose=verbose, restarts=restarts, ftname=run_config["ftname"], tgtname=run_config["tgtname"], true_cls_batch_attr_name=true_cls_batch_attr_name,\
+             true_cls_attr_name=true_cls_attr_name)
 
         out_fn = os.path.join(result_dir, "logits_and_advex.pt")
         if not debug:
@@ -304,7 +307,7 @@ def attack_and_eval_run(inp_dir, attack, th_analyze, use_split, OFF_MFLD_LABEL, 
     
 @ex.capture
 def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, logits_of_raw_ex,\
-     th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, ftname, tgtname, result_dir, use_split, _log):
+     th_analyze, OFF_MFLD_LABEL, attack_param_dict, data_param_dict, task, ftname, tgtname, result_dir, use_split, true_cls_attr_name, _log):
 
     results = list()
 
@@ -316,7 +319,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
     pct_cm_plot_dir = os.path.join(result_dir, "pct_cm_plots_{}".format(use_split))
     os.makedirs(pct_cm_plot_dir, exist_ok=True)
 
-    onmfld_pts = dataset.normed_all_points[dataset.class_labels != OFF_MFLD_LABEL]
+    onmfld_pts = dataset.normed_all_points[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
 
     def get_closest_onmfld_pt(onmfld_pts, all_pb_ex):
         pair_dist_pb_to_raw = torch.cdist(all_pb_ex, onmfld_pts)
@@ -332,7 +335,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         # _log.info("what is task != 'dist': {}".format(task != "dist"))
 
         # for normal examples (will be helpful for comparison)
-        true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
+        true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
         pred_classes = torch.max(logits_of_raw_ex, dim=1)[1]
 
         clf_report = classification_report(true_classes, pred_classes, output_dict=True)
@@ -345,7 +348,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
 
 
         # for adversarial examples
-        adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
+        adv_true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
         # assert (adv_true_classes == true_classes).all()
         adv_pred_classes = torch.max(logits_of_pb_ex, dim=1)[1]
 
@@ -417,7 +420,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         for th in th_analyze:
             # th = float(th)
             # for normal examples (will be helpful for comparison)
-            true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL]
+            true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
             pred_classes = torch.min(logits_of_raw_ex, dim=1)[1]
             pred_classes[torch.min(logits_of_raw_ex, dim=1)[0] > th] = OFF_MFLD_LABEL
 
@@ -431,7 +434,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
 
 
             # for adversarial examples
-            adv_true_classes = dataset.class_labels[dataset.class_labels != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
+            adv_true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
             adv_true_preclasses = adv_true_classes.clone()
             adv_true_classes[min_dist_pb_to_raw_vals > th] = OFF_MFLD_LABEL
             adv_pred_classes = torch.min(logits_of_pb_ex, dim=1)[1]
@@ -550,7 +553,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
 
 
 @ex.capture
-def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname, true_class_attr_name):
+def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, attack_fn, atk_routine, atk_flavor, eps, eps_iter, nb_iter, norm, verbose, task, restarts, ftname, tgtname, true_cls_batch_attr_name, true_cls_attr_name):
 
     _log.info("logging attack parameters")
     _log.info("atk_flavor={}".format(atk_flavor))
@@ -567,11 +570,11 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 
     dl = dataloaders[use_split]
 
-    num_neg = np.floor(dl.dataset.N / 2).astype(np.int64).item()
+    num_neg = dl.dataset.num_neg if dl.dataset.num_neg is not None else np.floor(dl.dataset.N / 2).astype(np.int64).item()
     num_onmfld = dl.dataset.N - num_neg
 
     # num_classes = dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL].max().item() + 1
-    num_classes = np.unique(dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL]).shape[0]
+    num_classes = np.unique(getattr(dl.dataset, true_cls_attr_name)[getattr(dl.dataset, true_cls_attr_name) != OFF_MFLD_LABEL]).shape[0]
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
@@ -588,7 +591,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
 
         inputs = batch[ftname]
         targets = batch[tgtname]
-        true_classes = batch[true_class_attr_name]
+        true_classes = batch[true_cls_batch_attr_name]
 
         # experiment was performed on points 'exactly' on the manifold.
         # in our dataset, these points are those with class labels != 2
