@@ -319,7 +319,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
     pct_cm_plot_dir = os.path.join(result_dir, "pct_cm_plots_{}".format(use_split))
     os.makedirs(pct_cm_plot_dir, exist_ok=True)
 
-    onmfld_pts = dataset.normed_all_points[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
+    onmfld_pts = getattr(dataset, ftname)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL]
 
     def get_closest_onmfld_pt(onmfld_pts, all_pb_ex):
         pair_dist_pb_to_raw = torch.cdist(all_pb_ex, onmfld_pts)
@@ -578,8 +578,8 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
-    all_deltas = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
-    all_pb_ex = torch.zeros(num_onmfld, dl.dataset.normed_all_points.shape[1])
+    all_deltas = torch.zeros(num_onmfld, getattr(dl.dataset, ftname).shape[1])
+    all_pb_ex = torch.zeros(num_onmfld, getattr(dl.dataset, ftname).shape[1])
 
     all_targets = torch.zeros(num_onmfld, num_classes)
     if task == "clf":
