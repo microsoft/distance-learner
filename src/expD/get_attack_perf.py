@@ -571,7 +571,7 @@ def attack_model(_log, cuda, use_split, OFF_MFLD_LABEL, dataloaders, model_fn, a
     num_onmfld = dl.dataset.N - num_neg
 
     # num_classes = dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL].max().item() + 1
-    num_classes = np.unique(dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL]).shape[0] + 1
+    num_classes = np.unique(dl.dataset.class_labels[dl.dataset.class_labels != OFF_MFLD_LABEL]).shape[0]
     logits_of_raw_ex = torch.zeros(num_onmfld, num_classes)
     logits_of_pb_ex = torch.zeros(num_onmfld, num_classes)
     
