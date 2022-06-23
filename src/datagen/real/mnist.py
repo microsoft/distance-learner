@@ -82,10 +82,10 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
 
 
         trfm = [
-                torchvision.transforms.ToTensor()
+            torchvision.transforms.ToTensor()
         ]
         if transform == "default":
-            trfm.append([
+            trfm.extend([
                 torchvision.transforms.Normalize((0.1307,), (0.3081,))
             ])
         
