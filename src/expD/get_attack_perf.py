@@ -96,6 +96,29 @@ def config(attack, input_files):
     dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
 
+@ex.named_config
+def mnist_cfg(attack, input_files):
+
+    cuda = 0
+    device = torch.device("cuda:{}".format(cuda) if torch.cuda.is_available() and cuda is not None else "cpu")
+
+    num_workers = 8
+    OFF_MFLD_LABEL = 2
+
+    batch_size = 512
+    use_split = "test" # data split to generate perturbations from
+    ckpt_to_use = "best" # ["best", "last"]
+
+    th_analyze = np.arange(1e-1, 1.0, 1e-1) # if model is distance learner, then thresholds to analyse performance
+    th_analyze = np.append(th_analyze, np.inf)
+
+    debug = False
+    clean = False
+
+    dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/mnist_test/attack_perfs_on_runs"
+    ex.observers.append(FileStorageObserver(dump_dir))
+
+
 
 def load_run_config(run_dir):
 

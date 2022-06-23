@@ -517,7 +517,7 @@ def train(model, optimizer, loss_func, dataloaders, device, save_dir, scheduler,
             
 
 def test(model, dataloader, device, task="regression",\
-     feature_name="normed_points", target_name="normed_distances",\
+     feature_name="normed_points", target_name="normed_distances", \
      save_dir=None, specs_dict=None, name="data", debug=False):
     
     model.eval()
@@ -596,9 +596,10 @@ def test(model, dataloader, device, task="regression",\
     # print(targets_fn)
     if task == "regression":
         masked_targets = all_targets.clone().detach()
-        masked_targets[all_targets == np.inf] = 0
+        M = dataloader.dataset.M if hasattr("M", dataloader.dataset) else dataloader.dataset.genattrs.M
+        masked_targets[all_targets == M] = 0
         masked_logits = all_logits.clone().detach()
-        masked_logits[all_targets == np.inf] = 0
+        masked_logits[all_targets == M] = 0
         mse = mean_squared_error(masked_targets, masked_logits)
         mse_on_mfld = mean_squared_error(masked_targets[np.round(all_targets) == 0], masked_logits[np.round(all_targets) == 0])
 
