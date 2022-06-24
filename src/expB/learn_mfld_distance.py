@@ -596,7 +596,7 @@ def test(model, dataloader, device, task="regression",\
     # print(targets_fn)
     if task == "regression":
         masked_targets = all_targets.clone().detach()
-        M = dataloader.dataset.M if hasattr("M", dataloader.dataset) else dataloader.dataset.genattrs.M
+        M = dataloader.dataset.M if hasattr(dataloader.dataset, "M") else dataloader.dataset.genattrs.M
         masked_targets[all_targets == M] = 0
         masked_logits = all_logits.clone().detach()
         masked_logits[all_targets == M] = 0
