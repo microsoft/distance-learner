@@ -22,14 +22,14 @@ class FaissKNeighbors:
         self.y = None
         self.k = k
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None, gpu_index=2):
         self.index = faiss.IndexFlatL2(X.shape[1])
         self.index.add(np.array(X).astype(np.float32))
         self.res = faiss.StandardGpuResources()
 
         self.gpu_index = faiss.index_cpu_to_gpu(
             self.res,
-            0,
+            gpu_index,
             self.index
         )
         self.y = y
