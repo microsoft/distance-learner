@@ -415,7 +415,8 @@ def mnist_cfg():
         "online": False,
         "off_online": False,
         "augment": False,
-        "transform": None
+        "transform": None,
+        "gamma": 0.5
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
