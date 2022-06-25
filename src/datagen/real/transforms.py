@@ -7,6 +7,10 @@ import numpy as np
 
 from sklearn.decomposition import PCA
 
+trfm_map = {
+    "default": DefaultTransform,
+    "pca": PCATransform
+}
 
 class DefaultTransform(object):
 
@@ -40,10 +44,10 @@ class PCATransform(object):
         self.pca.fit(data.reshape(data.shape[0], -1))
 
     def transform(self, inp):
-        return self.pca.transform(inp)
+        return self.pca.transform(inp.reshape(inp.shape[0], -1))
 
     def __call__(self, inp):
-        return self.transform(inp.reshape(inp.shape[0], -1))
+        return self.transform(inp)
         
         
 

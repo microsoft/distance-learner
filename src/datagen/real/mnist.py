@@ -167,7 +167,8 @@ class MNISTManifolds(RealWorldManifolds, Dataset):
             "max_t_delta": 1e-3,
             "max_norm": 1e-1,
             "M": 1.0,
-            "transform": "default"
+            "transform": "default",
+            "gamma": 1.0
         }
 
         val_cfg_dict = copy.deepcopy(train_cfg_dict)

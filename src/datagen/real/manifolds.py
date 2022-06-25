@@ -66,6 +66,7 @@ class RealWorldManifolds(ABC):
         normalize=True,
         norm_factor=None,
         transform=None,
+        gamma=0.5,
         **kwargs):
         """
         :param num_neg: number of off-manifold examples
@@ -108,6 +109,8 @@ class RealWorldManifolds(ABC):
         :type norm_factor: float
         :param transform: transform to apply to samples in the dataset
         :type transform: Optional[Callable]
+        :param gamma: factor by which to scale distances after min-max norm 
+        :type gamma: float
         """
 
         self.seed = seed
@@ -150,6 +153,7 @@ class RealWorldManifolds(ABC):
         self.max_norm = max_norm
         self.D = D
         self.M = M
+        self.gamma = gamma
         self.normalize = normalize
         self.norm_factor = norm_factor
 
@@ -518,6 +522,7 @@ class RealWorldManifolds(ABC):
         self.normed_all_points = (self.all_points - self.norm_factor[2]) / self.norm_factor[3]
         self.normed_all_actual_distances = self.all_actual_distances.clone()
         self.normed_all_actual_distances[self.all_actual_distances != self.M] = (self.all_actual_distances[self.all_actual_distances != self.M] - self.norm_factor[0]) / (self.norm_factor[1] - self.norm_factor[0])
+        self.normed_all_actual_distances[self.all_actual_distances != self.M] *= self.gamma
         logger.info("[{}]: normalization done!".format(self.__class__.__name__))
 
     @abstractmethod
