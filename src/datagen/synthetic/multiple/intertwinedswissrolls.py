@@ -918,10 +918,18 @@ class IntertwinedSwissRolls(Dataset):
         except:
             logger.info("[IntertwinedSwissRolls]: Could not save spec_attrs")
 
-        torch.save(data_attrs, data_fn)
+        try:
+            torch.save(data_attrs, data_fn)
+        except:
+            logger.info("[IntertwinedSwissRolls]: Could not save data_attrs")
 
-        self.S1.save_data(S1_dir)
-        self.S2.save_data(S2_dir)
+        try:
+            self.S1.save_data(S1_dir)
+            self.S2.save_data(S2_dir)
+        except:
+            logger.info("[IntertwinedSwissRolls]: Could not save anything")
+
+        
 
         
     @classmethod
