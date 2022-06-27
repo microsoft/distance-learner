@@ -624,7 +624,7 @@ class IntertwinedSwissRolls(Dataset):
                         )
                     )
             all_tang_and_norms = np.array(all_tang_and_norms)
-            if self.N <= 20000:
+            if self.N <= 1e+7:
                 self.all_tang_and_norms = all_tang_and_norms
 
             actual_chunk_size = min(pp_chunk_size, self.num_pos - i)
