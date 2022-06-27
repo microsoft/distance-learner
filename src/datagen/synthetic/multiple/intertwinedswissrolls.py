@@ -145,6 +145,8 @@ class IntertwinedSwissRolls(Dataset):
         if "buf_t" in kwargs:
             self.buf_t = kwargs["buf_t"]
 
+        self.on_mfld_t_ = None
+
         ## only relevant when `self._inferred == True`
 
         self.avoid_io = True # generate points without writing intermediate steps to disk
@@ -484,8 +486,28 @@ class IntertwinedSwissRolls(Dataset):
 
     def _make_poca_idx(self):
         self.poca_idx = np.zeros(self.num_neg, dtype=np.int64)
-        self.poca_idx[:self.num_neg // 2] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, dtype=np.int64), size=self.S1.genattrs.num_neg, replace=True).astype(np.int64)
-        self.poca_idx[self.num_neg // 2:] = np.random.choice(np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, self.num_pos, dtype=np.int64), size=self.S2.genattrs.num_neg, replace=True).astype(np.int64)
+        
+        S1_idx_choice = np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, dtype=np.int64)
+        assert S1_idx_choice.shape[0] == self.S1.specattrs.t.shape[0]
+        S2_idx_choice = np.arange(self.S1.genattrs.N - self.S1.genattrs.num_neg, self.num_pos, dtype=np.int64)
+        assert S2_idx_choice.shape[0] == self.S2.specattrs.t.shape[0]
+        
+        if self.buf_ht is None and self.buf_t is None:
+            """
+            this ensures that the poca indices are from non
+            boundary on-manifold points only
+            """
+            self._collect_on_mfld_t()
+            
+            num_onmfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+            non_bdry_idx_S1 = (self.S1.specattrs.t > self.t_min + self.buf_t) & (self.S1.specattrs.t < self.t_max - self.buf_t) & (self.on_mfld_pts_k_[:num_onmfld_S1, 2:] > self.buf_ht).all(axis=1) & (self.on_mfld_pts_k_[:num_onmfld_S1, 2:] < self.height - self.buf_ht).all(axis=1)
+            S1_idx_choice = S1_idx_choice[non_bdry_idx_S1]
+
+            non_bdry_idx_S2 = (self.S2.specattrs.t > self.t_min + self.buf_t) & (self.S2.specattrs.t < self.t_max - self.buf_t) & (self.on_mfld_pts_k_[num_onmfld_S1:, 2:] > self.buf_ht).all(axis=1) & (self.on_mfld_pts_k_[num_onmfld_S1:, 2:] < self.height - self.buf_ht).all(axis=1)
+            S2_idx_choice = S2_idx_choice[non_bdry_idx_S2]
+
+        self.poca_idx[:self.num_neg // 2] = np.random.choice(S1_idx_choice, size=self.S1.genattrs.num_neg, replace=True).astype(np.int64)
+        self.poca_idx[self.num_neg // 2:] = np.random.choice(S2_idx_choice, size=self.S2.genattrs.num_neg, replace=True).astype(np.int64)
         self.poca_idx_counts = np.zeros(self.num_pos).astype(np.int64)
         tmp = np.unique(self.poca_idx, return_counts=True)
         self.poca_idx_counts[tmp[0]] = tmp[1]
@@ -498,6 +520,12 @@ class IntertwinedSwissRolls(Dataset):
         if self.N < 1e+7:
             self.on_mfld_pts_trivial_ = np.zeros((self.num_pos, self.n))
             self.on_mfld_pts_trivial_[:, :self.k] = self.on_mfld_pts_k_
+
+    def _collect_on_mfld_t(self):
+        self.on_mfld_t_ = np.zeros(self.num_pos)
+        num_on_mfld_S1 = self.S1.genattrs.N - self.S1.genattrs.num_neg
+        self.on_mfld_t_[:num_on_mfld_S1] = self.S1.specattrs.t
+        self.on_mfld_t_[num_on_mfld_S1:] = self.S2.specattrs.t
 
     def _inf_setup(self):
         """setting up data for off manifold samples when computing inferred manifold"""
@@ -578,10 +606,23 @@ class IntertwinedSwissRolls(Dataset):
         S1_off_mfld_idx = 0
         S2_off_mfld_idx = self.S1.genattrs.N
 
-        for i in tqdm(range(0, int(self.num_pos), pp_chunk_size), desc="computing off mfld (2)"):
+        num_pos = self.num_pos
+        non_bdry_idx = None
+        # if self.buf_ht is not None and self.buf_t is not None:
+        #     self._collect_on_mfld_t()
+        #     non_bdry_idx = (self.on_mfld_t_ > self.t_min + self.buf_t) & (self.on_mfld_t_ < self.t_max - self.buf_t) & (self.on_mfld_pts_k_[:, 2:] > self.buf_ht).all(axis=1) & (self.on_mfld_pts_k_[:, 2:] < self.height - self.buf_ht).all(axis=1) 
+        #     num_pos = int(sum(non_bdry_idx))
 
-            nbhr_indices = self.nn_indices[i:min(self.num_pos, i+pp_chunk_size)]
-            mask = np.equal(nbhr_indices, np.arange(i, min(self.num_pos, i+pp_chunk_size)).reshape(-1, 1))
+        for i in tqdm(range(0, int(num_pos), pp_chunk_size), desc="computing off mfld (2)"):
+            
+            nbhr_indices = None
+            # if self.buf_ht is None and self.buf_t is None:
+            nbhr_indices = self.nn_indices[i:min(num_pos, i+pp_chunk_size)]
+            # else:
+            #     nbhr_indices = self.nn_indices[non_bdry_idx][i:min(num_pos, i+pp_chunk_size)]
+            
+            
+            mask = np.equal(nbhr_indices, np.arange(i, min(num_pos, i+pp_chunk_size)).reshape(-1, 1))
             mask[mask.sum(axis=1) == 0, -1] = True
             nbhr_indices = nbhr_indices[~mask].reshape(nbhr_indices.shape[0], nbhr_indices.shape[1] - 1).astype(np.int64)
 
@@ -589,11 +630,10 @@ class IntertwinedSwissRolls(Dataset):
             nbhrs = None
             if self.on_mfld_pts_trivial_ is None:
                 on_mfld_pts = np.zeros((pp_chunk_size, self.n))
-                if self.buf_ht is not None and self.buf_t is not None:
-                    non_bdry_idx = (self.on_mfld_pts_k_[:, 0] > self.t_min + self.buf_t) & (self.on_mfld_pts_k_[:, 1] < self.t_max - self.buf_t) & (self.on_mfld_pts_k_[:, 2:] > self.buf_ht).all(axis=1) & (self.on_mfld_pts_k_[:, 2:] < self.height - self.buf_ht).all(axis=1) 
-                    on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[non_bdry_idx][i:i+pp_chunk_size]
-                else:
-                    on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
+                # if self.buf_ht is not None and self.buf_t is not None:
+                #     on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[non_bdry_idx][i:i+pp_chunk_size]
+                # else:
+                on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
 
                 nbhrs = np.zeros((pp_chunk_size, nbhr_indices.shape[1], self.n))
                 nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices]
