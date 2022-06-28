@@ -1,0 +1,14 @@
+notebooks/test-3D.html
+notebooks/test-3D-2.html
+tmp/
+notebooks_mutate/
+src/dump_*
+datasets/
+dumps/
+notebooks/.ipynb_checkpoints/*
+__pycache__
+lightning_logs/
+tune_dist_learn_resnet18*
+notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints
+tmp/

@@ -1,0 +1,20 @@
+{
+    "batch_size": 512,
+    "cuda": 0,
+    "task": "clf",
+    "num_epochs": 500,
+    "save_dir": "/azuredrive/dumps/expC_dist_learner_for_adv_ex/k2n2/std_clf/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm,clf}_data{2spheres_in_unit_cube;n=2;k=2}/07062021-072632/",
+    "name": "train",
+    "warmup": null,
+    "cooldown": null,
+    "lr": null,
+    "init_wts": "/azuredrive/dumps/expC_dist_learner_for_adv_ex/k2n2/std_clf/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm,clf}_data{2spheres_in_unit_cube;n=2;k=2}/07062021-072632/models/test_MLPwithNormalization_model{hidden_sizes=512x4,sigmoid_last,batch_norm,clf}_data{2spheres_in_unit_cube;n=2;k=2}_07062021-072632_val_loss_0.6298815727233886_epoch_2.pth",
+    "num_classes": 2,
+    "input_size": 2,
+    "train_fn": "/azuredrive/datasets/expC/2spheres_k2n2/train_set.pt",
+    "val_fn": "/azuredrive/datasets/expC/2spheres_k2n2/val_set.pt",
+    "test_fn": "/azuredrive/datasets/expC/2spheres_k2n2/test_set.pt",
+    "data_fn": null,
+    "ftname": "normed_points",
+    "tgtname": "classes"
+}
