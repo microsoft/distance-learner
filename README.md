@@ -36,35 +36,92 @@ The code in this project is used to run a pipeline as follows:
 4. Robust Classifier Training: To create a classifier generated under adversarial training [[Madry et. al]](https://arxiv.org/abs/1706.06083)
 5. Testing on Adversarial Attacks: We attack the models trained in 2-4 with PGD-based $l_2$-norm attacks.
 
-The complete pipeline trains and compares Distance Learner, Standard Classifier and Robust Classifier on adversarial attacks. As an example, let us say that we want to run this pipeline on a dataset consisting of two concentric 24-spheres (24 dimensional spheres) embedded in 500-dimensional space. The following commands would be required to run this pipeline:
+The complete pipeline trains and compares Distance Learner, Standard Classifier and Robust Classifier on adversarial attacks. As an example, let us say that we want to run this pipeline on a dataset consisting of two concentric 50-spheres (50 dimensional spheres) embedded in 500-dimensional space. The following commands would be required to run this pipeline:
 
 ```bash
-# Steps 1 & 2
+# Switch to directory with training code
+cd ./src/expC
 
+# Steps 1 & 2
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="./dumps/rdm_concspheres_test/" \
- data.data_tag=rdm_concspheres \
+ data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
- data.data_params.train.k=50 \
+ data.data_params.train.k=51 \
  data.data_params.train.n=500 \
  data.data_params.train.max_t_delta=1e-3 \
  data.data_params.train.max_norm=0.14 \
  data.data_params.val.N=200000 \
  data.data_params.val.num_neg=100000 \
- data.data_params.val.k=50 \
+ data.data_params.val.k=51 \
  data.data_params.val.n=500 \
  data.data_params.val.max_norm=0.14 \
  data.data_params.test.N=200000 \
  data.data_params.test.num_neg=100000 \
- data.data_params.test.k=50 \
+ data.data_params.test.k=51 \
  data.data_params.test.n=500 \
  data.data_params.test.max_norm=0.14 \
  model.input_size=500 \
  data.generate=True \
  task=regression
+ 
+# Step 3
+
+python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
+ data.data_tag=rdm_concspheres_m50n500 \
+ data.data_params.train.N=2500000 \
+ data.data_params.train.num_neg=2000000 \
+ data.data_params.train.k=51 \
+ data.data_params.train.n=500 \
+ data.data_params.train.max_t_delta=1e-3 \
+ data.data_params.train.max_norm=0.14 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.num_neg=100000 \
+ data.data_params.val.k=51 \
+ data.data_params.val.n=500 \
+ data.data_params.val.max_norm=0.14 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.num_neg=100000 \
+ data.data_params.test.k=51 \
+ data.data_params.test.n=500 \
+ data.data_params.test.max_norm=0.14 \
+ model.input_size=500 \
+ on_mfld_noise=0 \
+ adv_train=False \
+ test_off_mfld=False \
+ data.generate=False \
+ task=clf
+ 
+ # Step 4
+ 
+ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
+ data.data_tag=rdm_concspheres_m50n500 \
+ data.data_params.train.N=2500000 \
+ data.data_params.train.num_neg=2000000 \
+ data.data_params.train.k=51 \
+ data.data_params.train.n=500 \
+ data.data_params.train.max_t_delta=1e-3 \
+ data.data_params.train.max_norm=0.14 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.num_neg=100000 \
+ data.data_params.val.k=51 \
+ data.data_params.val.n=500 \
+ data.data_params.val.max_norm=0.14 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.num_neg=100000 \
+ data.data_params.test.k=51 \
+ data.data_params.test.n=500 \
+ data.data_params.test.max_norm=0.14 \
+ model.input_size=500 \
+ on_mfld_noise=0 \
+ adv_train=True \
+ adv_train_params.atk_eps=8e-2 \
+ test_off_mfld=False \
+ data.generate=False \
+ task=clf
 ```
 
-The above command generates the required dataset, as well as 
+
 
 
 ## Contributing
