@@ -21,6 +21,8 @@ The manifold hypothesis (real world data concentrates near low-dimensional manif
 * matplotlib==3.1.3
 * plotly==5.8.0
 * seaborn==0.10.0
+* tensorboard==2.9.0
+* tqdm==4.42.1
 * sacred==0.8.2
 ```
 
