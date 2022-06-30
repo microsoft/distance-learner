@@ -73,8 +73,8 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
 python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
  data.logdir="./dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
- data.data_params.train.N=2500000 \
- data.data_params.train.num_neg=2000000 \
+ data.data_params.train.N=6500000 \
+ data.data_params.train.num_neg=6000000 \
  data.data_params.train.k=51 \
  data.data_params.train.n=500 \
  data.data_params.train.max_t_delta=1e-3 \
@@ -101,8 +101,8 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
 python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
  data.logdir="./dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
- data.data_params.train.N=2500000 \
- data.data_params.train.num_neg=2000000 \
+ data.data_params.train.N=6500000 \
+ data.data_params.train.num_neg=6000000 \
  data.data_params.train.k=51 \
  data.data_params.train.n=500 \
  data.data_params.train.max_t_delta=1e-3 \
@@ -148,6 +148,11 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
     - `common.py`: Some common utility functions for all kinds of synthetic manifold datasets
     - `plot_ittwswrolls.py`: Plotting functions for synthetic manifold datasets
   - `data_configs.py`: Configuration values for synthetic datasets
+  - `data_ingredients.py`: Data ingredient for the pipeline; Collates data parameters and synthesizes the dataset
+  - `model_ingredients.py`: Model ingredient for the pipeline; Loads/Initialized the model to be used for training
+  - `learn_cls_from_dist.py`: Runs the data synthesis and model training pipeline end-to-end
+
+- 
 
 
 ## Contributing
