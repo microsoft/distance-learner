@@ -125,6 +125,9 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  data.generate=False \
  task=clf
  
+# Switch to directory with adversarial attack analysis
+cd ../expD
+ 
 # Step 5: Adversarial Attack analysis
 
 python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
