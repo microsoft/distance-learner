@@ -121,6 +121,8 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  task=clf
 ```
 
+The above commands complete the data synthesis and training of the models (Steps 1-4). The next step is to subject these models to adversarial attacks. 
+
 
 
 
