@@ -139,12 +139,15 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
 
 ### About the code
 
-- `./src/expB`: Contains the code for our models and traning loop
+- `./src/expB/`: Contains the code for our models and traning loop
   - `myNNs.py`: Contains the code for all our models
   - `learn_mfld_distance.py`: Training and test loop for our models
 
-- `./src/expC`: Pipeline code for data synthesis and model training
-  - 
+- `./src/expC/`: Pipeline code for data synthesis and model training
+  - `expC_utils/`: Contains some utility functions for the pipeline
+    - `common.py`: Some common utility functions for all kinds of synthetic manifold datasets
+    - `plot_ittwswrolls.py`: Plotting functions for synthetic manifold datasets
+  - `data_configs.py`: Configuration values for synthetic datasets
 
 
 ## Contributing
