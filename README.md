@@ -16,6 +16,7 @@ The manifold hypothesis (real world data concentrates near low-dimensional manif
 * torch==1.11.0
 * torchvision==0.12.0
 * faiss==1.7.2
+* cleverhans==4.0.0
 * livelossplot==0.5.5
 * matplotlib==3.1.3
 * plotly==5.8.0
@@ -27,7 +28,43 @@ All of these can be installed using any package manager such as `pip` or Conda. 
 
 ### Sample Code
 
-#### Installing the Distance Learner
+The code in this project is used to run a pipeline as follows:
+
+1. Data Synthesis: Synthesizes the data used for training the models. This includes on-manifold point generation for synthetic datasets, as well as off-manifold augmentations.
+2. Distance Learner Training: Involves training the distance learner on the generated dataset.
+3. Standard Classifier Training: Involves training the standard classifier on the generated dataset.
+4. Robust Classifier Training: To create a classifier generated under adversarial training [[Madry et. al]](https://arxiv.org/abs/1706.06083)
+5. Testing on Adversarial Attacks: We attack the models trained in 2-4 with PGD-based $l_2$-norm attacks.
+
+The complete pipeline trains and compares Distance Learner, Standard Classifier and Robust Classifier on adversarial attacks. As an example, let us say that we want to run this pipeline on a dataset consisting of two concentric 24-spheres (24 dimensional spheres) embedded in 500-dimensional space. The following commands would be required to run this pipeline:
+
+```bash
+# Steps 1 & 2
+
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="./dumps/rdm_concspheres_test/" \
+ data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_1e-3 \
+ data.data_params.train.N=6500000 \
+ data.data_params.train.num_neg=6000000 \
+ data.data_params.train.k=50 \
+ data.data_params.train.n=500 \
+ data.data_params.train.max_t_delta=1e-3 \
+ data.data_params.train.max_norm=0.14 \
+ data.data_params.val.N=200000 \
+ data.data_params.val.num_neg=100000 \
+ data.data_params.val.k=50 \
+ data.data_params.val.n=500 \
+ data.data_params.val.max_norm=0.14 \
+ data.data_params.test.N=200000 \
+ data.data_params.test.num_neg=100000 \
+ data.data_params.test.k=50 \
+ data.data_params.test.n=500 \
+ data.data_params.test.max_norm=0.14 \
+ model.input_size=500 \
+ data.generate=True \
+ task=regression
+```
+
+
 
 ## Contributing
 
