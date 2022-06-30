@@ -137,7 +137,14 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
  dump_dir="./dumps/rdm_concspheres_test/attack_perfs_on_runs" \
 ```
 
+### About the code
 
+- `./src/expB`: Contains the code for our models and traning loop
+  - `myNNs.py`: Contains the code for all our models
+  - `learn_mfld_distance.py`: Training and test loop for our models
+
+- `./src/expC`: Pipeline code for data synthesis and model training
+  - 
 
 
 ## Contributing
