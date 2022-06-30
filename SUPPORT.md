@@ -6,7 +6,7 @@ This project uses GitHub Issues to track bugs and feature requests. Please searc
 issues before filing new issues to avoid duplicates.  For new issues, file your bug or 
 feature request as a new Issue.
 
-For help and questions about using this project, please write to achetan40 [at] gmail [dot] com.
+For help and questions about using this project, please write to nkwatra [at] microsoft [dot] com.
 
 ## Microsoft Support Policy  
 
