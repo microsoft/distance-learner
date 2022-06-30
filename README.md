@@ -42,7 +42,8 @@ The complete pipeline trains and compares Distance Learner, Standard Classifier 
 # Switch to directory with training code
 cd ./src/expC
 
-# Steps 1 & 2
+# Steps 1 & 2: Data Synthesis and Distance Learner training
+
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="./dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=6500000 \
@@ -65,9 +66,10 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
  data.generate=True \
  task=regression
  
-# Step 3
+# Step 3: Standard Classifier training
 
 python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
+ data.logdir="./dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=2500000 \
  data.data_params.train.num_neg=2000000 \
@@ -92,9 +94,10 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  data.generate=False \
  task=clf
  
- # Step 4
- 
- python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
+ # Step 4: Robust Classifier training
+
+python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
+ data.logdir="./dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=2500000 \
  data.data_params.train.num_neg=2000000 \
@@ -119,9 +122,15 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  test_off_mfld=False \
  data.generate=False \
  task=clf
-```
+ 
+# Step 5: Adversarial Attack analysis
 
-The above commands complete the data synthesis and training of the models (Steps 1-4). The next step is to subject these models to adversarial attacks. 
+python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
+ input_files.settings_type=list \
+ input_files.proj_dir="./dumps/rdm_concspheres_test/" \
+ input_files.settings_to_analyze="['rdm_concspheres_m50n500/1','rdm_concspheres_m50n500/2', 'rdm_concspheres_m50n500/3']" \
+ dump_dir="./dumps/rdm_concspheres_test/attack_perfs_on_runs" \
+```
 
 
 
