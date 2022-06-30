@@ -42,7 +42,7 @@ The complete pipeline trains and compares Distance Learner, Standard Classifier 
 # Steps 1 & 2
 
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="./dumps/rdm_concspheres_test/" \
- data.data_tag=rdm_concspheres_k50n500_noninfdist_moreoffmfldv3_bs4096_highmn40_inferred_maxtdelta_1e-3 \
+ data.data_tag=rdm_concspheres \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
  data.data_params.train.k=50 \
@@ -64,6 +64,7 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
  task=regression
 ```
 
+The above command generates the required dataset, as well as 
 
 
 ## Contributing
