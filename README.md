@@ -46,7 +46,7 @@ cd ./src/expC
 
 # Steps 1 & 2: Data Synthesis and Distance Learner training
 
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="./dumps/rdm_concspheres_test/" \
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -71,7 +71,7 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
 # Step 3: Standard Classifier training
 
 python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
- data.logdir="./dumps/rdm_concspheres_test/" \
+ data.logdir="../dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -99,7 +99,7 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  # Step 4: Robust Classifier training
 
 python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres \
- data.logdir="./dumps/rdm_concspheres_test/" \
+ data.logdir="../dumps/rdm_concspheres_test/" \
  data.data_tag=rdm_concspheres_m50n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -132,18 +132,20 @@ cd ../expD
 
 python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
  input_files.settings_type=list \
- input_files.proj_dir="./dumps/rdm_concspheres_test/" \
+ input_files.proj_dir="../dumps/rdm_concspheres_test/" \
  input_files.settings_to_analyze="['rdm_concspheres_m50n500/1','rdm_concspheres_m50n500/2', 'rdm_concspheres_m50n500/3']" \
  dump_dir="./dumps/rdm_concspheres_test/attack_perfs_on_runs" \
 ```
 
 ### About the code
 
+This section describes the purpose of relevant files in the project.
+
 - `./src/expB/`: Contains the code for our models and traning loop
   - `myNNs.py`: Contains the code for all our models
   - `learn_mfld_distance.py`: Training and test loop for our models
 
-- `./src/expC/`: Pipeline code for data synthesis and model training
+- `./src/expC/`: Contains pipeline code for data synthesis and model training
   - `expC_utils/`: Contains some utility functions for the pipeline
     - `common.py`: Some common utility functions for all kinds of synthetic manifold datasets
     - `plot_ittwswrolls.py`: Plotting functions for synthetic manifold datasets
@@ -152,7 +154,8 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
   - `model_ingredients.py`: Model ingredient for the pipeline; Loads/Initialized the model to be used for training
   - `learn_cls_from_dist.py`: Runs the data synthesis and model training pipeline end-to-end
 
-- 
+- `./src/expD/`: Contains pipeline code for adversarial attacks on trained models
+  - `attack_ingredients.py`: 
 
 
 ## Contributing
