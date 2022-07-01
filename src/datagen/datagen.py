@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, concentricspheres, wellseparatedspheres
 from datagen.real import mnist
