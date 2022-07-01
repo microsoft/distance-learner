@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 """
 Given a model and its data split, and an adversarial attack
 this measures the efficacy of the attack at various epsilons
