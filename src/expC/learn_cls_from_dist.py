@@ -1,3 +1,6 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 """
 Explores various ways to classify points on spheres (or general manifold)
 using the distance learned in Experiment B (see: `learn_mfld_distance.py`)
