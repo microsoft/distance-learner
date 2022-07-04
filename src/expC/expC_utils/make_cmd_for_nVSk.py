@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
 """
 Script written to help with forming commands to call for n Vs. k analysis
 of learn_cls_from_dist.py (Expt. 3a). 
