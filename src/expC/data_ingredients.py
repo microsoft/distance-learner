@@ -1,4 +1,6 @@
-from ast import NodeTransformer
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 import os
 import sys
 import copy
