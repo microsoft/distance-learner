@@ -141,6 +141,8 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
 
 This section describes the purpose of relevant files in the project.
 
+- `./src/datagen/`: Module for generating data for experiments
+
 - `./src/expB/`: Contains the code for our models and traning loop
   - `myNNs.py`: Contains the code for all our models
   - `learn_mfld_distance.py`: Training and test loop for our models
@@ -160,6 +162,9 @@ This section describes the purpose of relevant files in the project.
   - `attacks.py`: Code for adversarial attacks to the models can be evaluated on
   - `get_attack_perf.py`: Runner script that loads the models and data, generates adversarial examples and evaluated the models
 
+### Results
+
+In order to generate results
 
 ## Contributing
 
