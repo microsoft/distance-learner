@@ -1,3 +1,5 @@
+cd ../src/expC
+
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False data.mtype=inf-ws-spheres tgtname=normed_actual_distances loss_func=std_mse \
  data.data_tag=rdm_wsspheres_m1n2 \
  data.logdir="./data" \
