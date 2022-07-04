@@ -1,4 +1,7 @@
-cd ../src/expC
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+cd ../expC
 
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-ittw-swissrolls \
  data.data_tag=rdm_swrolls_m1n50 \
