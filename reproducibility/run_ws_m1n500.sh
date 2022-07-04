@@ -1,4 +1,7 @@
-cd ../src/expC
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
+cd ../expC
 
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False data.mtype=inf-ws-spheres tgtname=normed_actual_distances loss_func=std_mse \
  data.data_tag=rdm_wsspheres_m1n500 \
