@@ -26,7 +26,7 @@ The manifold hypothesis (real world data concentrates near low-dimensional manif
 * sacred==0.8.2
 ```
 
-All of these can be installed using any package manager such as `pip` or Conda. We recommend using a virtual environment before installing these packages.
+All of these can be installed using any package manager such as `pip` or Conda. We recommend using a virtual environment before installing these packages. For installing Faiss, please refer to [instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md) on their official repository.
 
 ### Sample Code
 
