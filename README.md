@@ -155,7 +155,10 @@ This section describes the purpose of relevant files in the project.
   - `learn_cls_from_dist.py`: Runs the data synthesis and model training pipeline end-to-end
 
 - `./src/expD/`: Contains pipeline code for adversarial attacks on trained models
-  - `attack_ingredients.py`: 
+  - `attack_ingredients.py`: Settings for attacks that models have to be evaluated on
+  - `inpfn_ingredients.py`: Settings for models and datasets that have to be evaluated with adversarial attacks
+  - `attacks.py`: Code for adversarial attacks to the models can be evaluated on
+  - `get_attack_perf.py`: Runner script that loads the models and data, generates adversarial examples and evaluated the models
 
 
 ## Contributing
