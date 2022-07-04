@@ -1,5 +1,7 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 import os
-from posixpath import split
 import re
 import sys
 import json
