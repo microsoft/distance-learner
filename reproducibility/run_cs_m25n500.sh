@@ -99,5 +99,7 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  test_off_mfld=False \
  data.generate=False \
  task=clf
+ 
+ cd ../expD
 
 python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list input_files.proj_dir="./data/rdm_concspheres_test/" dump_dir="./data/rdm_concspheres_test/attack_perfs_on_runs" "input_files.settings_to_analyze=['rdm_concspheres_m25n500/1', 'rdm_concspheres_m25n500/2', 'rdm_concspheres_m25n500/3', 'rdm_concspheres_m25n500/4']"
