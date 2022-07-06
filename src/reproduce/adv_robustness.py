@@ -39,10 +39,8 @@ parser.add_argument('-l','--labels', nargs='+', help='labels to identify each ru
 parser.add_argument('-m','--markers', nargs='+', help='markers to use for plotting', required=False, default=["o", "X", "s", "D"])
 parser.add_argument('-t','--thresh', help='threshold to use for distance learner analysis', required=False, default=0.14, type=float)
 parser.add_argument('-e','--eps_iter', help='step size of adversarial attacks', required=False, type=float, default=5e-03)
-parser.add_argument('-c','--count_offmfld_pred_corr', help='count off-manifold predictions as correct', action="store_true")
-parser.add_argument('-d','--discard_offmfld_pred', help='discard off manifold samples in result prediction', action="store_true")
 parser.add_argument('-o','--off_mfld_label', help='off-manifold label', type=str, default="2")
-parser.add_argument('-r', '--result_file', help='path to plot generated', type=str, default='./adv_robustness.pdf')
+parser.add_argument('-r','--result_file', help='path to plot generated', type=str, default='./adv_robustness.pdf')
 
 args = parser.parse_args()
 
@@ -79,8 +77,7 @@ master_df.drop_duplicates(drop_dup_by_columns, inplace=True)
 
 ths = [args.thresh]
 eps_iter = args.eps_iter
-count_offmfld_pred_corr = args.count_offmfld_pred_corr # count off manifold predictions as accurate
-discard_offmfld_pred = args.discard_offmfld_pred
+
 off_mfld_label = args.off_mfld_label
 
 
@@ -108,33 +105,12 @@ for k in range(len(ths)):
         perf = np.zeros(eps_arr.shape)
         for i in range(eps_arr.shape[0]):
             eps = eps_arr[i]
-            if task == "dist":
-                path_to_load = df[(np.round(df.thresh, 2) == thresh) & (df.eps == eps) & (np.round(df.eps_iter, 3) == eps_iter)].adv_pct_cm.tolist()[0]
-                
-                adv_pct_cm_df = pd.read_csv(path_to_load, index_col=0)
-                adv_pct_cm = adv_pct_cm_df.to_numpy()
-                perf[i] = np.trace(adv_pct_cm)
-                if count_offmfld_pred_corr:
-                    if off_mfld_label in adv_pct_cm_df.columns: 
-                        off_mfld_stats = adv_pct_cm_df["2"].to_numpy()
-                        if off_mfld_stats.shape[0] == adv_pct_cm.shape[0]:
-                            perf[i] += np.sum(off_mfld_stats[:-1])
-                        else:
-                            perf[i] += np.sum(off_mfld_stats[:])
-                elif discard_offmfld_pred:
-                    end_row = adv_pct_cm.shape[0]
-                    end_col = adv_pct_cm.shape[1]
-                    if off_mfld_label in adv_pct_cm_df.columns:
-                        end_col = -1
-                    if end_row == int(off_mfld_label) + 1:
-                        end_row = -1
-                    perf[i] = np.trace(adv_pct_cm[:end_row, :end_col]) / np.sum(adv_pct_cm[:end_row, :end_col])
 
-            elif task == "clf":
-                path_to_load = df[(df.eps == eps) & (np.round(df.eps_iter, 3) == eps_iter)].adv_pct_cm.tolist()[0]
+            path_to_load = df[(np.round(df.thresh, 2) == thresh) & (df.eps == eps) & (np.round(df.eps_iter, 3) == eps_iter)].adv_pct_cm.tolist()[0]
+
+            adv_pct_cm_df = pd.read_csv(path_to_load, index_col=0)
+            perf[i] = np.sum([adv_pct_cm_df[i][int(i)] for i in adv_pct_cm_df.columns if int(i) in adv_pct_cm_df[i]])
                 
-                adv_pct_cm = pd.read_csv(path_to_load, index_col=0).to_numpy()
-                perf[i] = np.trace(adv_pct_cm)
     
 
         label = req_labels_k50n500[j]
