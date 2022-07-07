@@ -162,9 +162,11 @@ This section describes the purpose of relevant files in the project.
   - `attacks.py`: Code for adversarial attacks to the models can be evaluated on
   - `get_attack_perf.py`: Runner script that loads the models and data, generates adversarial examples and evaluated the models
 
+- `./src/reproduce/`: Contains steps to reproduce the results in our work 
+
 ### Results
 
-In order to generate results given in the paper, follow the instructions given [here](./reproducibility).
+In order to generate results given in the paper, follow the instructions given [here](./src/reproduce).
 
 ## Contributing
 
