@@ -134,7 +134,7 @@ python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" \
  input_files.settings_type=list \
  input_files.proj_dir="../dumps/rdm_concspheres_test/" \
  input_files.settings_to_analyze="['rdm_concspheres_m50n500/1','rdm_concspheres_m50n500/2', 'rdm_concspheres_m50n500/3']" \
- dump_dir="./dumps/rdm_concspheres_test/attack_perfs_on_runs" \
+ dump_dir="../dumps/rdm_concspheres_test/attack_perfs_on_runs" \
 ```
 
 ### About the code
