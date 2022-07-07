@@ -51,9 +51,9 @@ all_run_files = [i for i in os.listdir(RES_DIR) if i.endswith(".json")]
 
 
 
-req_files_k50n500 = args.req_files
+files = args.req_files
 
-req_labels_k50n500 = args.labels
+labels = args.labels
 
 markers = args.markers
 
@@ -86,22 +86,15 @@ fig, axs = plt.subplots(1, 1, figsize=(6, 4), sharey=True)
 
 for k in range(len(ths)):
     thresh = ths[k]
-    for j in range(len(req_files_k50n500)):
-        file = req_files_k50n500[j]
+    for j in range(len(files)):
+        file = files[j]
         full_fn = os.path.join(RES_DIR, file)
         df = pd.read_json(full_fn)
 
         eps_arr = df.eps.unique()[:-1]
 
         task = df.task.unique()[0]
-        run_tag = None
-        run_id = None
-        try:
-            run_tag = df.run_tag.unique()[0]
-            run_id = df.run_id.unique()[0]
-        except:
-            run_tag = "rdm_concspheres_k50n500_noninfdist"
-            run_id = 1
+        
         perf = np.zeros(eps_arr.shape)
         for i in range(eps_arr.shape[0]):
             eps = eps_arr[i]
@@ -113,7 +106,7 @@ for k in range(len(ths)):
                 
     
 
-        label = req_labels_k50n500[j]
+        label = labels[j]
         axs.plot(eps_arr, perf, label=label, marker=markers[j], markersize=8, linewidth=2)
 
 axs.legend(fancybox=True, shadow=True)
