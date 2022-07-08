@@ -18,7 +18,7 @@ This directory contains scripts to generated adversarial examples for models and
         - `norm`: norm to use for PGD attack
         - `atk_routine`: whether to use our routine or to use the attack implemented in [`cleverhans`](https://github.com/cleverhans-lab/cleverhans)
     - All settings in this file have to be in a **list**. 
-    - Specifying from command-line in this case is possible but can be cumbersome especially when using `numpy` based functions to create the list or using `numpy.inf` in the `norm` for example.
+    - Specifying from command-line in this case is possible but can be cumbersome especially when using `numpy` based functions to create the list or using `numpy.inf` in the `norm` list for example.
     - If you absolutely have to specify from command line, an example of how to do it is: `with attack.atk_routine="['my']"` when you want to specify `atk_routine`
 
 2. Next, go to `inpfn_ingredients.py`:

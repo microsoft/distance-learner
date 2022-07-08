@@ -30,7 +30,7 @@ This directory contains the pipeline code for synthesizing data and training our
 4. We have typically done 3 types of experiments together with same data. Here are the commands to run them after settings have been changed as described above:
     - Training Distance Learner: ```python3 learn_cls_from_dist.py with task=regression data.generate=True```
     - Training Standard Classifier: ```python3 learn_cls_from_dist.py with task=clf train_on_onmfld=True on_mfld_noise=0 adv_train=False test_off_mfld=False```
-    - Training Robust Classifier: ```python3 learn_cls_from_dist.py with task=clf train_on_onmfld=False train_on_onmfld=True on_mfld_noise=0 adv_train=True adv_train_params.atk_eps=<INSERT_ATTACK_EPSILON> test_off_mfld=False``
+    - Training Robust Classifier: `python3 learn_cls_from_dist.py with task=clf train_on_onmfld=False train_on_onmfld=True on_mfld_noise=0 adv_train=True adv_train_params.atk_eps=<INSERT_ATTACK_EPSILON> test_off_mfld=False`
 
 5. For a fixed manifold type, we try the above steps in order, in the same `logdir` and `data_tag`.
 
@@ -39,5 +39,8 @@ This directory contains the pipeline code for synthesizing data and training our
     - Edit `n`, `k` in `data_config.py` (or from command line using `with data.data_params.{n,k}`)
     - Edit `input_size` in `model_config.py` (or from command line using `with model.input_size`)
 
+7. If you want to edit parameters used for robust training, refer to the `adv_train_params` dictionary in the `config` function in `learn_cls_from_dist.py`.
+    - To edit them from command line, use `with adv_train_params.<PARAM_NAME>=<PARAM_VALUE>`
+    - For details on what the parameters mean, see [this document](../adversarial_attack/README.md).
 
-7. After a run, we generate a few plots using `pipeline/analysis.py`. Command is: `analysis.py --dump_dir <PATH_TO_SACRED_RUN_DUMP> --on <SPLIT_TO_ANALYSE> --num_points <NUM_POINTS_TO_RENDER>`
+8. After a run, we generate a few plots using `pipeline/analysis.py`. Command is: `analysis.py --dump_dir <PATH_TO_SACRED_RUN_DUMP> --on <SPLIT_TO_ANALYSE> --num_points <NUM_POINTS_TO_RENDER>`
