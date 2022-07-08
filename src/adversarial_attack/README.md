@@ -23,8 +23,8 @@ This directory contains scripts to generated adversarial examples for models and
 
 2. Next, go to `inpfn_ingredients.py`:
     - You can specify the directory where the script should look for the run directory to be processed
-    - `settings_type` can be edited if you want to provide file names as a `"list"` or `"dict"`. The `list` option was included in case you want to provide edits from command-line.
-    - edit `settings_fn` if you want to provide edits from a JSON file. The format of the JSON file should be similar to the dictionary format given in the script.
+    - `settings_type` can be edited if you want to provide file names as a `"list"` or `"dict"`. The `"list"` option was included in case you want to provide edits from command-line.
+    - Edit `settings_fn` if you want to provide edits from a JSON file. The format of the JSON file should be similar to the dictionary format given in the script.
 
 3. Lastly, go to `get_attack_perf.py`:
     - Most of the parameters in this file are self-explanatory.
