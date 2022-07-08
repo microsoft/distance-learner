@@ -1,9 +1,12 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
+# directory to store results
+LOG_DIR="../../data"
+
 cd ../pipeline
 
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../../data" \
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir=$LOG_DIR \
  data.data_tag=rdm_concspheres_m25n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -50,7 +53,7 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  data.generate=False \
  task=clf
 
-python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres  data.logdir="../../data" \
+python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres  data.logdir=$LOG_DIR \
  data.data_tag=rdm_concspheres_m25n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -77,7 +80,7 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  task=clf
 
 
-python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres  data.logdir="../../data" \
+python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False data.mtype=inf-conc-spheres  data.logdir=$LOG_DIR \
  data.data_tag=rdm_concspheres_m25n500 \
  data.data_params.train.N=6500000 \
  data.data_params.train.num_neg=6000000 \
@@ -105,4 +108,4 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  
  cd ../adversarial_attack
 
-python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list input_files.proj_dir="../../data/rdm_concspheres_test/" dump_dir="../../data/rdm_concspheres_test/attack_perfs_on_runs" "input_files.settings_to_analyze=['rdm_concspheres_m25n500/1', 'rdm_concspheres_m25n500/2', 'rdm_concspheres_m25n500/3', 'rdm_concspheres_m25n500/4']"
+python3 get_attack_perf.py with debug=False "attack.atk_routine=['my']" input_files.settings_type=list input_files.proj_dir="$LOG_DIR/rdm_concspheres_test/" dump_dir="$LOG_DIR/rdm_concspheres_test/attack_perfs_on_runs" "input_files.settings_to_analyze=['rdm_concspheres_m25n500/1', 'rdm_concspheres_m25n500/2', 'rdm_concspheres_m25n500/3', 'rdm_concspheres_m25n500/4']"

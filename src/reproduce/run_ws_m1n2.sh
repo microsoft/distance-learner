@@ -1,11 +1,15 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
+
+# directory to store results
+LOG_DIR="../../data"
+
 cd ../pipeline
 
 python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False data.mtype=inf-ws-spheres tgtname=normed_actual_distances loss_func=std_mse \
  data.data_tag=rdm_wsspheres_m1n2 \
- data.logdir="../../data" \
- data.backup_dir="../../data" \
+ data.logdir=$LOG_DIR \
+ data.backup_dir=$LOG_DIR \
  data.data_params.train.k=2 \
  data.data_params.train.n=2 \
  data.data_params.train.N=1500000 \
@@ -24,8 +28,8 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
 
  python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1e-5 batch_size=512 debug=False data.mtype=inf-ws-spheres tgtname=normed_actual_distances loss_func=std_mse \
  data.data_tag=rdm_wsspheres_m1n2 \
- data.logdir="../../data" \
- data.backup_dir="../../data" \
+ data.logdir=$LOG_DIR \
+ data.backup_dir=$LOG_DIR \
  data.data_params.train.k=2 \
  data.data_params.train.n=2 \
  data.data_params.train.N=1500000 \
