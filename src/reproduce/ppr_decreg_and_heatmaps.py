@@ -1,9 +1,9 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 import os
-os.chdir("../src")
 import sys
-
+sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../')
+sys.path.insert(1, os.path.dirname(os.path.realpath(__file__)) + '/../../')
 import argparse
 
 import numpy as np
@@ -19,7 +19,7 @@ from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspheres, concentricspheres
 
 from pipeline.pipeline_utils.common import *
-from pipeline.pipeline_utils import plot_ittwswrolls
+from src.pipeline.pipeline_utils import plotter
 
 MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,
@@ -31,10 +31,10 @@ MFLD_TYPES = {
 }
 
 MFLD_VIZ_BY_TYPE = {
-    "ittw-swissrolls": plot_ittwswrolls,
-    "inf-ittw-swissrolls": plot_ittwswrolls,
-    "inf-ws-spheres": plot_ittwswrolls,
-    "inf-conc-spheres": plot_ittwswrolls
+    "ittw-swissrolls": plotter,
+    "inf-ittw-swissrolls": plotter,
+    "inf-ws-spheres": plotter,
+    "inf-conc-spheres": plotter
 
 }
 
@@ -423,24 +423,24 @@ def run_analysis_2(dl_dump_dir, stdclf_dump_dir, on="test", h=800, thresh=None, 
     fig.savefig('decreg_{}_{}.svg'.format(plot_name, plot_type), dpi=300, bbox_inches="tight")
     plt.show()
     
-    
-parser = argparse.ArgumentParser()
-parser.add_argument("-d", "-dl_dump", type=str, required=True, help="complete path to distance learner dump")
-parser.add_argument("-s", "-stdclf_dump", type=str, required=True, help="complete path to standard classifier dump")
-parser.add_argument("-n", "-plot_name", type=str, required=True, help="name of plot")
-parser.add_argument("-d", "-plot_dir", type=str, required=True, help="directory to store plots")
-parser.add_argument("-h", "-dist_h_map", type=str, required=False, default="low", help="mode for plotting distance heat map ('low', 'all', 'high')")
-parser.add_argument("-t", "-thresh", type=float, required=False, default=0.1, help="threshold for plotting decision regions for distance learner")
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--dl_dump", type=str, required=True, help="complete path to distance learner dump")
+    parser.add_argument("-s", "--stdclf_dump", type=str, required=True, help="complete path to standard classifier dump")
+    parser.add_argument("-n", "--plot_name", type=str, required=True, help="name of plot")
+    parser.add_argument("-r", "--plot_dir", type=str, required=True, help="directory to store plots")
+    parser.add_argument("-h", "--dist_h_map", type=str, required=False, default="low", help="mode for plotting distance heat map ('low', 'all', 'high')")
+    parser.add_argument("-t", "--thresh", type=float, required=False, default=0.1, help="threshold for plotting decision regions for distance learner")
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
 
-dl_dump = args.dl_dump
-stdclf_dump = args.stdclf_dump
-plot_name = args.plot_name
-plotdir = args.plot_dir
-dist_h_map = args.dist_h_map
-thresh = args.thresh
+    dl_dump = args.dl_dump
+    stdclf_dump = args.stdclf_dump
+    plot_name = args.plot_name
+    plotdir = args.plot_dir
+    dist_h_map = args.dist_h_map
+    thresh = args.thresh
 
-run_analysis_2(dl_dump, stdclf_dump, "val", h=300, thresh=thresh, plot_type="sct", plot_name=plot_name, dist_h_map=args.dist_h_map)
+    run_analysis_2(dl_dump, stdclf_dump, "val", h=300, thresh=thresh, plot_type="sct", plot_name=plot_name, dist_h_map=args.dist_h_map, plotdir=plotdir)
 

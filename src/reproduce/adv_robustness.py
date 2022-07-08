@@ -14,11 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 from matplotlib.backends.backend_pdf import PdfPages
 
-import torch
-
 import seaborn as sns
-
-
 
 import matplotlib
 font = {'family' : 'sans-serif',
@@ -28,7 +24,7 @@ matplotlib.rc('font', **font)
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-d", "-res_dir", type=str, required=True, help="directory with adversarial attack analysis logs")
+parser.add_argument("-d", "--res_dir", type=str, required=True, help="directory with adversarial attack analysis logs")
 parser.add_argument('-f','--req_files', nargs='+', help='log file names', required=True)
 parser.add_argument('-l','--labels', nargs='+', help='labels to identify each run', required=False, default=[
     r"SC",
@@ -60,7 +56,7 @@ markers = args.markers
 
 
 master_df = None
-for f in req_files_k50n500:
+for f in files:
     res_file = os.path.join(RES_DIR, f)
     if master_df is None:
         master_df = pd.read_json(res_file)
@@ -86,12 +82,14 @@ fig, axs = plt.subplots(1, 1, figsize=(6, 4), sharey=True)
 
 for k in range(len(ths)):
     thresh = ths[k]
+    print(files)
     for j in range(len(files)):
+        
         file = files[j]
         full_fn = os.path.join(RES_DIR, file)
         df = pd.read_json(full_fn)
 
-        eps_arr = df.eps.unique()[:-1]
+        eps_arr = df.eps.unique()
 
         task = df.task.unique()[0]
         
@@ -102,6 +100,7 @@ for k in range(len(ths)):
             path_to_load = df[(np.round(df.thresh, 2) == thresh) & (df.eps == eps) & (np.round(df.eps_iter, 3) == eps_iter)].adv_pct_cm.tolist()[0]
 
             adv_pct_cm_df = pd.read_csv(path_to_load, index_col=0)
+
             perf[i] = np.sum([adv_pct_cm_df[i][int(i)] for i in adv_pct_cm_df.columns if int(i) in adv_pct_cm_df[i]])
                 
     

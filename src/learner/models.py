@@ -39,7 +39,6 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 
 from tqdm import tqdm
 
-from expB.ptcifar.models import ResNet18
 
 
 class MLP(nn.Module):

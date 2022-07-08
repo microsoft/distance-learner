@@ -16,7 +16,7 @@ from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspher
 from datagen.real import mnist
 
 from pipeline_utils.common import *
-from pipeline_utils import plot_ittwswrolls
+from pipeline_utils import plotter
 
 MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,
@@ -30,11 +30,11 @@ MFLD_TYPES = {
 }
 
 MFLD_VIZ_BY_TYPE = {
-    "ittw-swissrolls": plot_ittwswrolls,
-    "inf-ittw-swissrolls": plot_ittwswrolls,
-    "inf-ittw-swissrolls2": plot_ittwswrolls,
-    "inf-ws-spheres": plot_ittwswrolls,
-    "inf-conc-spheres": plot_ittwswrolls
+    "ittw-swissrolls": plotter,
+    "inf-ittw-swissrolls": plotter,
+    "inf-ittw-swissrolls2": plotter,
+    "inf-ws-spheres": plotter,
+    "inf-conc-spheres": plotter
 
 }
 
