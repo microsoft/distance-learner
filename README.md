@@ -143,8 +143,8 @@ This section describes the purpose of relevant files in the project.
 
 - `./src/datagen/`: Module for generating data for experiments
 
-- `./src/expB/`: Contains the code for our models and traning loop
-  - `myNNs.py`: Contains the code for all our models
+- `./src/pipeline/`: Contains the code for our models and traning loop
+  - `models.py`: Contains the code for all our models
   - `learn_mfld_distance.py`: Training and test loop for our models
 
 - `./src/pipeline/`: Contains pipeline code for data synthesis and model training
