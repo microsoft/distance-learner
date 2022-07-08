@@ -15,10 +15,7 @@ def attack_cfg():
     atk_routine = ["my", "chans"] # ["chans", "my"] if given option is not available, it defaults to "my"
 
     eps = np.arange(1e-2, 1.1e-1, 1e-2)
-    # eps_iter = np.arange(5e-3, 1e-2, 1e-3)
     eps_iter = [5e-3]
-    # eps = [1e-2]
-    # eps_iter = [5e-3]
     nb_iter = [100]
     norm = [2] # [2, np.inf]
     restarts = [1]
