@@ -44,14 +44,9 @@ from sklearn.metrics import mean_squared_error, f1_score, accuracy_score, classi
 from tqdm import tqdm
 
 
-from expB.spheres_v2 import RandomSphere, TwoRandomSpheres
-from expB.ptcifar.models import ResNet18
-from expB.myNNs import *
-from expB.workspace import *
+from learner.models import *
 
-import expD.attacks as adv_atk
-
-from datagen.synthetic.multiple.intertwinedswissrolls import IntertwinedSwissRolls
+import adversarial_attack.attacks as adv_atk
 
 from utils import *
 
@@ -662,7 +657,6 @@ if __name__ == '__main__':
     parser.add_argument("--warmup", type=int, help="number of warmup steps", default=10)
     parser.add_argument("--cooldown", type=int, help="epoch after which to cooldown", default=300)
     parser.add_argument("--lr", type=float, help="learning rate", default=1e-5)
-    # parser.add_argument("--init_wts", type=str, help="path to initial weights", default="/azuredrive/dumps/expB_learning_distance_from_mfld/init_model_weights.pt")
     parser.add_argument("--init_wts", type=str, help="path to initial weights", default=None)
     parser.add_argument("--num_classes", type=int, help="number of manifolds", default=1)
     parser.add_argument("--input_size", type=int, help="input size", default=2)

@@ -14,7 +14,7 @@ import torch
 
 import matplotlib.pyplot as plt
 
-from expB import learn_mfld_distance as lmd
+from learner import learn_mfld_distance as lmd
 from datagen.synthetic.single import manifold
 
 def load_config(dump_dir):
@@ -111,6 +111,3 @@ def get_coplanar_kdim_samples(dataset):
         return dataset.all_points_k
 
 
-
-if __name__ == "__main__":
-    model = load_model("/azuredrive/dumps/expC_dist_learner_for_adv_ex/rdm_swrolls/2")

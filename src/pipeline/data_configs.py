@@ -61,21 +61,21 @@ def synth_conc_spheres_cfg():
         "off_online": False,
         "augment": False,
         "gamma": 0,
-        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+        "cache_dir": "../../data_cache/train/"
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
     val_cfg_dict["N"] = 200000
     val_cfg_dict["num_neg"] = None
     val_cfg_dict["inferred"] = False
-    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["cache_dir"] = "../../data_cache/val/"
     val_cfg_dict["seed"] = 101
 
     test_cfg_dict = copy.deepcopy(train_cfg_dict)
     test_cfg_dict["N"] = 200000
     test_cfg_dict["num_neg"] = None
     test_cfg_dict["inferred"] = False
-    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["cache_dir"] = "../../data_cache/test/"
     test_cfg_dict["seed"] = 89
 
     cfg = {
@@ -110,19 +110,19 @@ def inf_conc_spheres_cfg():
         "max_t_delta": 1e-3,
         "recomp_tn": False,
         "gamma": 0,
-        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+        "cache_dir": "../../data_cache/train/"
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
     val_cfg_dict["num_neg"] = None
     val_cfg_dict["inferred"] = False
-    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["cache_dir"] = "../../data_cache/val/"
     val_cfg_dict["seed"] = 101
 
     test_cfg_dict = copy.deepcopy(train_cfg_dict)
     test_cfg_dict["num_neg"] = None
     test_cfg_dict["inferred"] = False
-    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["cache_dir"] = "../../data_cache/test/"
     test_cfg_dict["seed"] = 89
 
     cfg = {
@@ -323,19 +323,19 @@ def inf_ws_spheres_cfg():
         "gamma": 0,
         "c_dist": 2.5,
         "same_rot": False,
-        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+        "cache_dir": "../../data_cache/train/"
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
     val_cfg_dict["num_neg"] = None
     val_cfg_dict["inferred"] = False
-    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["cache_dir"] = "../../data_cache/val/"
     val_cfg_dict["seed"] = 101
 
     test_cfg_dict = copy.deepcopy(train_cfg_dict)
     test_cfg_dict["num_neg"] = None
     test_cfg_dict["inferred"] = False
-    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["cache_dir"] = "../../data_cache/test/"
     test_cfg_dict["seed"] = 89
 
     cfg = {
@@ -371,19 +371,19 @@ def ws_spheres_cfg():
         "recomp_tn": False,
         "gamma": 0,
         "c_dist": 2.5,
-        "cache_dir": "/mnt/t-achetan/data_cache/train/"
+        "cache_dir": "../../data_cache/train/"
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
     val_cfg_dict["num_neg"] = None
     val_cfg_dict["inferred"] = False
-    val_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/val/"
+    val_cfg_dict["cache_dir"] = "../../data_cache/val/"
     val_cfg_dict["seed"] = 101
 
     test_cfg_dict = copy.deepcopy(train_cfg_dict)
     test_cfg_dict["num_neg"] = None
     test_cfg_dict["inferred"] = False
-    test_cfg_dict["cache_dir"] = "/mnt/t-achetan/data_cache/test/"
+    test_cfg_dict["cache_dir"] = "../../data_cache/test/"
     test_cfg_dict["seed"] = 89
 
     cfg = {
@@ -400,7 +400,7 @@ def mnist_cfg():
     has_val = False
 
     train_cfg_dict = {
-        "on_mfld_path": "/mnt/t-achetan/datasets/MNIST",
+        "on_mfld_path": "../../data/datasets/MNIST",
         "k": 10,
         "n": 784,
         "use_labels": [1, 8],

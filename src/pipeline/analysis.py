@@ -15,8 +15,8 @@ from datagen.synthetic.single import sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspheres, concentricspheres
 from datagen.real import mnist
 
-from expC_utils.common import *
-from expC_utils import plot_ittwswrolls
+from pipeline_utils.common import *
+from pipeline_utils import plot_ittwswrolls
 
 MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,
@@ -47,7 +47,7 @@ def run_analysis(dump_dir, on="val", num_points=50000, thresh=None):
     config_dict = load_config(dump_dir)
     task = config_dict["task"]
     model = load_model(dump_dir)
-    data_dir = os.path.join(dump_dir, "../data")
+    data_dir = os.path.join(dump_dir, "../../data")
     data_mfld_type = config_dict["data"]["mtype"]
 
     train_set, val_set, test_set = MFLD_TYPES[data_mfld_type].load_splits(data_dir)

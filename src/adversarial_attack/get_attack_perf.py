@@ -60,7 +60,7 @@ from sacred.observers import FileStorageObserver
 
 from utils import *
 from datagen import datagen
-from expB import learn_mfld_distance as lmd
+from learner import learn_mfld_distance as lmd
 from attack_ingredients import attack_ingredient, get_atk
 from inpfn_ingredients import get_inp_fn, inpfn_ingredient
 from attacks import *
@@ -97,8 +97,7 @@ def config(attack, input_files):
     true_cls_batch_attr_name = "classes"
     true_cls_attr_name = "class_labels"
 
-    # dump_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/attack_perfs_on_runs"
-    dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/attack_perfs_on_runs"
+    dump_dir = "../../data/attack_perfs_on_runs/"
     ex.observers.append(FileStorageObserver(dump_dir))
 
 @ex.named_config
@@ -123,7 +122,7 @@ def mnist_cfg(attack, input_files):
     true_cls_attr_name = "class_idx"
     true_cls_batch_attr_name = "class_idx"
 
-    dump_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/mnist_test/attack_perfs_on_runs"
+    dump_dir = "../../data/attack_perfs_on_runs"
     ex.observers.append(FileStorageObserver(dump_dir))
 
 
@@ -342,6 +341,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
         return min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx
 
     min_dist_pb_to_raw_vals, min_dist_pb_to_raw_idx = get_closest_onmfld_pt(onmfld_pts, all_pb_ex)
+    min_dist_pb_to_raw_normed_vals = None
     if hasattr(dataset, "norm_distances"):
         min_dist_pb_to_raw_normed_vals = dataset.norm_distances(min_dist_pb_to_raw_vals)
 
@@ -452,7 +452,10 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
             adv_true_classes = getattr(dataset, true_cls_attr_name)[getattr(dataset, true_cls_attr_name) != OFF_MFLD_LABEL][min_dist_pb_to_raw_idx]
             adv_true_preclasses = adv_true_classes.clone()
             tmp = min_dist_pb_to_raw_vals
-            if hasattr(dataset, "norm_distances"):
+            if ("norm" not in ftname) and ("norm" in tgtname):
+                # if input is unnormalized but target is normalized
+                # then normalize distance of perturbed samples to raw samples
+                # to avoid miscalculations
                 tmp = min_dist_pb_to_raw_normed_vals
             adv_true_classes[tmp > th] = OFF_MFLD_LABEL
             adv_pred_classes = torch.min(logits_of_pb_ex, dim=1)[1]
@@ -529,7 +532,7 @@ def calc_attack_perf(inp_dir, dataset, all_pb_ex, all_targets, logits_of_pb_ex, 
                     plt.clf()
 
             targets_of_pb_ex = torch.zeros_like(logits_of_pb_ex)
-            targets_of_pb_ex[np.arange(targets_of_pb_ex.shape[0]), adv_true_preclasses] = min_dist_pb_to_raw_vals
+            targets_of_pb_ex[np.arange(targets_of_pb_ex.shape[0]), adv_true_preclasses] = tmp
             targets_of_pb_ex[np.arange(targets_of_pb_ex.shape[0]), ~adv_true_preclasses] = dataset.M
             plot_distance_scatter_plot(logits_of_pb_ex, targets_of_pb_ex, tgtname, distance_scatter_plot_dir, th, tol=5e-2)
             _log.info("distance scatter plots written to: {}".format(distance_scatter_plot_dir))
@@ -717,9 +720,10 @@ def attack_on_runs(inp_files, attack, th_analyze, use_split, OFF_MFLD_LABEL, dum
     return all_results
 
 @ex.capture
-def clean_incorrect_dumps(_log, inp_files):
+def clean_incorrect_dumps(_log, inp_files, ckpt_to_use):
     for inp_dir in inp_files:
-        attack_perf_result_dir = os.path.join(inp_dir, "attack_perf")
+        suffix = "_" + ckpt_to_use if ckpt_to_use is not None else ""
+        attack_perf_result_dir = os.path.join(inp_dir, "attack_perf" + suffix)
         try:
             shutil.rmtree(attack_perf_result_dir)
             _log.info("removed directory: {}".format(attack_perf_result_dir))

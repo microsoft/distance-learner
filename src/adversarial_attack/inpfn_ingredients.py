@@ -10,19 +10,28 @@ inpfn_ingredient = Ingredient('input_files')
 @inpfn_ingredient.config
 def inpfn_config():
 
-    # proj_dir = "/azuredrive/deepimage/data1/t-achetan/adv_geom_dumps/dumps/expD_distlearner_against_adv_eg/rdm_concspheres/"
-    # settings_to_analyze = {
-    #     "rdm_concspheres_k100n100_noninfdist": ["1", "2"],
-    #     "rdm_concspheres_k500n500_noninfdist": ["1", "2"]
-    # }
-    proj_dir = "/data/t-achetan/dumps/expC_dist_learner_for_adv_ex/rdm_concspheres_test/"
+    proj_dir = "../../data/rdm_concspheres_test/"
+
+    # providing input files as a dictionary
+    # with keys as data_tag and value as a list of
+    # runs to process
     settings_type = "dict"
-    # settings_to_analyze = {
-    #     "rdm_concspheres_k50n500_noninfdist_moreoffmfld_bs4096_inferred_debug": ["1"]
-    # }
-    settings_to_analyze = [
-        "rdm_concspheres_k50n500_noninfdist_moreoffmfld_advtraindebug_bs4096_eps=1e-1/1"
-    ]
+    settings_to_analyze = {
+        "rdm_concspheres_m100n100": ["1", "2"],
+        "rdm_concspheres_m50n500": ["1", "2"]
+    }
+
+    # providing input files as a list of 
+    # directories containing runs to process
+    #
+    # settings_type = "list"
+    # settings_to_analyze = [
+    #     "rdm_concspheres_m100n100/1",
+    #     "rdm_concspheres_m100n100/2",
+    #     "rdm_concspheres_m50n500/1",
+    #     "rdm_concspheres_m50n500/2",
+    # ]
+    
     settings_fn = None
     if settings_fn is not None:
         with open(settings_fn) as f:

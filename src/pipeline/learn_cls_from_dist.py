@@ -61,24 +61,14 @@ from tqdm import tqdm
 from sacred import Experiment
 from sacred.observers import FileStorageObserver
 
-from datagen.synthetic.single import manifold, sphere, swissroll
-from datagen.synthetic.multiple import intertwinedswissrolls
-from expB import learn_mfld_distance as lmd
+from datagen.synthetic.single import manifold
+from learner import learn_mfld_distance as lmd
 
 from model_ingredients import initialise_model, model_cfg, model_ingredient
 from data_ingredients import initialise_data, data_cfg, data_ingredient
 
 from utils import seed_everything
 
-# class DistanceBasedClf(object):
-#     """
-#         Classifier that uses distances computed by 
-#         Distance Regressor for manifolds to predict
-#         class values
-#     """
-
-#     def __init__(self):
-#         pass
 
 
 

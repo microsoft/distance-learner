@@ -1,10 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-cd ../expC
+cd ../pipeline
 
 # train distlearner
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../data" \
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=1.5e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../../data" \
  data.data_tag=rdm_concspheres_m1n2 \
  data.data_params.train.N=1500000 \
  data.data_params.train.num_neg=500000 \
@@ -27,7 +27,7 @@ python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=1
  task=regression
 
 # train stdclf
-python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../data" \
+python3 learn_cls_from_dist.py with cuda=0 num_epochs=1000 cooldown=700 warmup=10 lr=8e-5 batch_size=4096 debug=False loss_func=std_mse tgtname=normed_actual_distances data.mtype=inf-conc-spheres data.logdir="../../data" \
  data.data_tag=rdm_concspheres_m1n2 \
  data.data_params.train.N=1500000 \
  data.data_params.train.num_neg=500000 \

@@ -12,13 +12,14 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, Dataset, DataLoader
 
+import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-from datagen.synthetic.single import sphere, swissroll
+from datagen.synthetic.single import manifold, sphere, swissroll
 from datagen.synthetic.multiple import intertwinedswissrolls, wellseparatedspheres, concentricspheres
 
-from expC.expC_utils.common import *
-from expC.expC_utils import plot_ittwswrolls
+from pipeline.pipeline_utils import *
+from pipeline.pipeline_utils import plot_ittwswrolls
 
 MFLD_TYPES = {
     "single-sphere": sphere.RandomSphere,
@@ -350,7 +351,7 @@ def run_analysis_2(dl_dump_dir, stdclf_dump_dir, on="test", h=800, thresh=None, 
     config_dict = load_config(dl_dump_dir)
     task = config_dict["task"]
     model = load_model(dl_dump_dir)
-    data_dir = os.path.join(dl_dump_dir, "../data")
+    data_dir = os.path.join(dl_dump_dir, "../../data")
     data_mfld_type = config_dict["data"]["mtype"]
 
 #     train_set, val_set, test_set = MFLD_TYPES[data_mfld_type].load_splits(data_dir)
@@ -384,7 +385,7 @@ def run_analysis_2(dl_dump_dir, stdclf_dump_dir, on="test", h=800, thresh=None, 
  
     
     dl_data_dir = data_dir
-    data_dir = os.path.join(dump_dir, "../data")
+    data_dir = os.path.join(dump_dir, "../../data")
     config_dict = load_config(stdclf_dump_dir)
     task = config_dict["task"]
     model = load_model(stdclf_dump_dir)

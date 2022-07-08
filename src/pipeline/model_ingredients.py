@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from sacred import Ingredient
 
-from expB import learn_mfld_distance as lmd
+from learner import learn_mfld_distance as lmd
 
 model_ingredient = Ingredient('model')
 

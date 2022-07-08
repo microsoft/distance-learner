@@ -42,7 +42,7 @@ The complete pipeline trains and compares Distance Learner, Standard Classifier 
 
 ```bash
 # Switch to directory with training code
-cd ./src/expC
+cd ./src/pipeline
 
 # Steps 1 & 2: Data Synthesis and Distance Learner training
 
@@ -126,7 +126,7 @@ python3 learn_cls_from_dist.py with cuda=3 num_epochs=1000 cooldown=700 warmup=1
  task=clf
  
 # Switch to directory with adversarial attack analysis
-cd ../expD
+cd ../adversarial_attack
  
 # Step 5: Adversarial Attack analysis
 
@@ -147,8 +147,8 @@ This section describes the purpose of relevant files in the project.
   - `myNNs.py`: Contains the code for all our models
   - `learn_mfld_distance.py`: Training and test loop for our models
 
-- `./src/expC/`: Contains pipeline code for data synthesis and model training
-  - `expC_utils/`: Contains some utility functions for the pipeline
+- `./src/pipeline/`: Contains pipeline code for data synthesis and model training
+  - `pipeline_utils/`: Contains some utility functions for the pipeline
     - `common.py`: Some common utility functions for all kinds of synthetic manifold datasets
     - `plot_ittwswrolls.py`: Plotting functions for synthetic manifold datasets
   - `data_configs.py`: Configuration values for synthetic datasets
@@ -156,7 +156,7 @@ This section describes the purpose of relevant files in the project.
   - `model_ingredients.py`: Model ingredient for the pipeline; Loads/Initialized the model to be used for training
   - `learn_cls_from_dist.py`: Runs the data synthesis and model training pipeline end-to-end
 
-- `./src/expD/`: Contains pipeline code for adversarial attacks on trained models
+- `./src/adversarial_attack/`: Contains pipeline code for adversarial attacks on trained models
   - `attack_ingredients.py`: Settings for attacks that models have to be evaluated on
   - `inpfn_ingredients.py`: Settings for models and datasets that have to be evaluated with adversarial attacks
   - `attacks.py`: Code for adversarial attacks to the models can be evaluated on
