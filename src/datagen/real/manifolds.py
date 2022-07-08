@@ -119,18 +119,6 @@ class RealWorldManifolds(ABC):
         self.seed = seed
         seed_everything(seed)
 
-        # self.num_pos = num_pos
-        # if N is None and num_neg is not None:
-        #     N = num_pos + num_neg
-        # elif N is not None:
-        #     if num_neg is not None:
-        #         assert N == num_pos + num_neg, "incompatible values for `N`, `num_neg`, `num_pos`"
-        #     else:
-        #         num_neg = N - num_pos
-        # else:
-        #     N = num_pos
-        #     num_neg = 0
-
         self.N = N
         self.num_neg = num_neg
         self.num_pos = None
