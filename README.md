@@ -166,7 +166,7 @@ This section describes the purpose of relevant files in the project.
 
 ### Results
 
-In order to generate results given in the paper, follow the instructions given [here](./src/reproduce).
+In order to generate results given in the paper, follow the instructions given [here](./src/reproduce/README.md).
 
 ## Contributing
 
