@@ -174,7 +174,7 @@ In order to generate results given in the paper, follow the instructions given [
 
 ## Cite
 
-If you find this code useful in your projects, please consider citing our work:
+To cite this work:
 
 ```
 @misc{chetan2022distance,
