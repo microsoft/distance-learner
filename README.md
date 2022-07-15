@@ -1,5 +1,9 @@
 # Distance Learner: Incorporating Manifold Prior to Model Training
 
+This repository contains the official implementation for:
+
+>[Distance Learner: Incorporating Manifold Prior to Model Training](https://arxiv.org/abs/2207.06888). *[Aditya Chetan](http://justachetan.github.io/)*, *[Nipun Kwatra](https://www.microsoft.com/en-us/research/people/nkwatra/)*
+
 ## About
 
 The manifold hypothesis (real world data concentrates near low-dimensional manifolds) is suggested as the principle behind the effectiveness of machine learning algorithms in very high dimensional problems that are common in domains such as vision and speech. Multiple methods have been proposed to explicitly incorporate the manifold hypothesis as a prior in modern Deep Neural Networks (DNNs), with varying success. In this paper, we propose a new method, Distance Learner, to incorporate this prior for DNN-based classifiers. Distance Learner is trained to predict the distance of a point from the underlying manifold of each class, rather than the class label. For classification, Distance Learner then chooses the class corresponding to the closest predicted class manifold. Distance Learner can also identify points as being out of distribution (belonging to neither class), if the distance to the closest manifold is higher than a threshold. We evaluate our method on multiple synthetic datasets and show that Distance Learner learns much more meaningful classification boundaries compared to a standard classifier. We also evaluate our method on the task of adversarial robustness, and find that it not only outperforms standard classifier by a large margin, but also performs at par with classifiers trained via state-of-the-art adversarial training.
@@ -167,6 +171,21 @@ This section describes the purpose of relevant files in the project.
 ### Results
 
 In order to generate results given in the paper, follow the instructions given [here](./src/reproduce/README.md).
+
+## Cite
+
+If you find this code useful in your projects, please consider citing our work:
+
+```
+@misc{chetan2022distance,
+    title={Distance Learner: Incorporating Manifold Prior to Model Training},
+    author={Aditya Chetan and Nipun Kwatra},
+    year={2022},
+    eprint={2207.06888},
+    archivePrefix={arXiv},
+    primaryClass={cs.LG}
+}
+```
 
 ## Contributing
 
