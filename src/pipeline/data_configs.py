@@ -110,7 +110,8 @@ def inf_conc_spheres_cfg():
         "max_t_delta": 1e-3,
         "recomp_tn": False,
         "gamma": 0,
-        "cache_dir": "../../data_cache/train/"
+        "cache_dir": "../../data_cache/train/",
+        "on_mfld_noise": 0.0
     }
 
     val_cfg_dict = copy.deepcopy(train_cfg_dict)
