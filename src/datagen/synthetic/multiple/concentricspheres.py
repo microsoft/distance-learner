@@ -41,7 +41,7 @@ class ConcentricSpheres(Dataset):
                 sigma=5, seed=42, r=10.0, g=10.0, x_ck=None, rotation=None, translation=None,\
                 normalize=True, norm_factor=None, gamma=0.5, anchor=None, online=False,\
                 off_online=False, augment=False, inferred=False, nn=None, buffer_nbhrs=2,\
-                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", **kwargs):
+                max_t_delta=1e-3, recomp_tn=False, use_new_knn=False, cache_dir="/tmp", on_mfld_noise=0, **kwargs):
         """
         :param N: number of samples in the dataset
         :type N: int
@@ -103,6 +103,8 @@ class ConcentricSpheres(Dataset):
         :type use_new_knn: bool
         :param cache_dir: directory to cache auxillary attributes in order to free RAM
         :type cache_dir: str
+        :param on_mfld_noise: magnitude of on-manifold noise to be added when `inferred == True`
+        :type on_mfld_noise: float
         """
 
         if seed is not None: seed_everything(seed)
@@ -174,6 +176,9 @@ class ConcentricSpheres(Dataset):
         ### only relevant when `self.inferred == True`###
 
         self.avoid_io = True # generate points without writing intermediate steps to disk
+        
+        self.on_mfld_noise = on_mfld_noise
+        self.on_mfld_noise_mat = None
 
         self.all_points_trivial_ = None
         self.all_points_tr_ = None
@@ -271,6 +276,13 @@ class ConcentricSpheres(Dataset):
         if self.N < 1e+7:
             self.on_mfld_pts_trivial_ = np.zeros((self.num_pos, self.n))
             self.on_mfld_pts_trivial_[:, :self.k] = self.on_mfld_pts_k_
+            if self.on_mfld_noise == 0:
+                self.on_mfld_noise_mat = 0
+            else:
+                self.on_mfld_noise_mat = np.random.normal(self.mu, self.sigma, size=self.on_mfld_pts_trivial_.shape)
+                self.on_mfld_noise_mat /= np.linalg.norm(self.on_mfld_noise_mat, axis=1, ord=2)
+                self.on_mfld_noise_mat *= self.on_mfld_noise
+            self.on_mfld_pts_trivial_ += self.on_mfld_noise_mat
 
     def _inf_setup(self):
         """setting up data for off manifold samples when computing inferred manifold"""
@@ -297,6 +309,7 @@ class ConcentricSpheres(Dataset):
                 if self.on_mfld_pts_trivial_ is None:
                     to_fit = np.zeros((self.N, self.n))
                     to_fit[:, self.k] = self.on_mfld_pts_k_
+                    to_fit += self.on_mfld_noise_mat
                 logger.info("[ConcentricSpheres]: fitting knn...")
                 self.knn.fit(to_fit)
                 logger.info("[ConcentricSpheres]: knn fit done")
@@ -332,6 +345,7 @@ class ConcentricSpheres(Dataset):
             if self.on_mfld_pts_trivial_ is None:
                 X = np.zeros((self.N, self.n))
                 X[:, self.k] = self.on_mfld_pts_k_
+                X += self.on_mfld_noise_mat
                 self.nn_distances, self.nn_indices = self.find_knn(X, use_new=False)
             else:
                 self.nn_distances, self.nn_indices = self.find_knn(self.on_mfld_pts_trivial_, use_new=False)
@@ -364,9 +378,10 @@ class ConcentricSpheres(Dataset):
             if self.on_mfld_pts_trivial_ is None:
                 on_mfld_pts = np.zeros((pp_chunk_size, self.n))
                 on_mfld_pts[:, :self.k] = self.on_mfld_pts_k_[i:i+pp_chunk_size]
+                on_mfld_pts += self.on_mfld_noise_mat[i:i+pp_chunk_size]
 
                 nbhrs = np.zeros((pp_chunk_size, nbhr_indices.shape[1], self.n))
-                nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices]
+                nbhrs[:, :, :self.k] = self.on_mfld_pts_k_[nbhr_indices] + self.on_mfld_noise_mat[nbhr_indices]
             else:
                 on_mfld_pts = self.on_mfld_pts_trivial_[i:i+pp_chunk_size]
                 nbhrs = self.on_mfld_pts_trivial_[nbhr_indices]
