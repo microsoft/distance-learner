@@ -103,7 +103,7 @@ class ConcentricSpheres(Dataset):
         :type use_new_knn: bool
         :param cache_dir: directory to cache auxillary attributes in order to free RAM
         :type cache_dir: str
-        :param on_mfld_noise: magnitude of on-manifold noise to be added when `inferred == True`
+        :param on_mfld_noise: magnitude of maximum on-manifold noise to be added when `inferred == True`
         :type on_mfld_noise: float
         """
 
@@ -280,8 +280,8 @@ class ConcentricSpheres(Dataset):
                 self.on_mfld_noise_mat = 0
             else:
                 self.on_mfld_noise_mat = np.random.normal(self.mu, self.sigma, size=self.on_mfld_pts_trivial_.shape)
-                self.on_mfld_noise_mat /= np.linalg.norm(self.on_mfld_noise_mat, axis=1, ord=2)
-                self.on_mfld_noise_mat *= self.on_mfld_noise
+                self.on_mfld_noise_mat /= np.linalg.norm(self.on_mfld_noise_mat, axis=1, ord=2).reshape(-1, 1)
+                self.on_mfld_noise_mat *= np.random.uniform(0, self.on_mfld_noise, size=self.on_mfld_noise_mat.shape[0]).reshape(-1, 1)
             self.on_mfld_pts_trivial_ += self.on_mfld_noise_mat
 
     def _inf_setup(self):
